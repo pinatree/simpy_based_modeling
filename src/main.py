@@ -5,10 +5,10 @@ import matplotlib.animation as animation
 import simpy
 from threading import Thread, Lock
 import time
+from material_flow.node.generator.resource_generator import ResourceGenerator
 
 # Импортируем ваши классы
 from agents.train import Train
-from clusters.MiningCluster import MiningCluster 
 from endpoint.railway_station import RailwayStation
 from fabric.fabric import Fabric
 from fabric.fabric_export import FabricExport
@@ -26,6 +26,11 @@ class MiningSystem:
     TRANSPORT_TIME_MIN = 20.0
     TRANSPORT_TIME_MAX = 30.0
 
+    def getDefaultRudeMiner(self):
+        resourceGenerator = ResourceGenerator(self.env, "rude", 480, 200, 1)
+        resourceGenerator.activate()
+        return resourceGenerator
+
     def __init__(self, env):
         self.env = env
         env.total_resources = 0.0
@@ -35,10 +40,6 @@ class MiningSystem:
 
         #railway station for fabric
         self.fabricRailwayStation = RailwayStation(env, self.FABRIC_STORAGE_SIZE, 1, True)
-        
-        # minings for source
-        miningCluster = MiningCluster(env, 4)
-        miningCluster.appendToSim(self.miningRailwayStation)
 
         #trains
         trains = []
@@ -48,6 +49,14 @@ class MiningSystem:
             env.process(simuTrain)
             trains.append(train)
         env.trains = trains
+
+        # miners
+        self.getDefaultRudeMiner()
+        self.getDefaultRudeMiner()
+        self.getDefaultRudeMiner()
+        self.getDefaultRudeMiner()
+        self.getDefaultRudeMiner()
+        self.getDefaultRudeMiner()
         
         #fabric
 
