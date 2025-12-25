@@ -5,19 +5,21 @@ import matplotlib.animation as animation
 import simpy
 from threading import Thread, Lock
 import time
+from material_flow.node.generator.resource_generator import ResourceGenerator
 
 # Импортируем ваши классы
-from agents.train import Train
-from clusters.MiningCluster import MiningCluster 
-from endpoint.railway_station import RailwayStation
-from fabric.fabric import Fabric
-from fabric.fabric_export import FabricExport
-from fabric.fabric_import import FabricImport
-from fabric.fabric_reciept import FabricReciept
+from material_flow.transport.train import Train
+from material_flow.node.fabric.fabric import Fabric
+from material_flow.node.fabric.fabric_export import FabricExport
+from material_flow.node.fabric.fabric_import import FabricImport
+from material_flow.node.fabric.fabric_reciept import FabricReciept
+from material_flow.transport.teleport import Teleport
+from material_flow.node.buffer.buffer import Buffer
+from material_flow.node.sink.sink import Sink
 
 # ========== КОНСТАНТЫ ==========
 UPDATE_INTERVAL = 100  # 0.1 секунды в миллисекундах
-SIMULATION_SPEED = 100 # Коэффициент ускорения симуляции
+SIMULATION_SPEED = 1000 # Коэффициент ускорения симуляции
 
 class MiningSystem:
     MINING_STORAGE_SIZE = 4*32*200*2
@@ -26,39 +28,47 @@ class MiningSystem:
     TRANSPORT_TIME_MIN = 20.0
     TRANSPORT_TIME_MAX = 30.0
 
+    def getDefaultRudeMiner(self):
+        resourceGenerator = ResourceGenerator(self.env, "rude", 480, 48, 200)
+        resourceGenerator.activate()
+        return resourceGenerator
+    
+    def getDefaultTeleport(self, source, sourceIndex, destination, destinationIndex, perMinute, frame):
+        teleport = Teleport(self.env, perMinute, frame, source, sourceIndex, destination, destinationIndex)
+        teleport.activate()
+        return teleport
+    
+    def getTrain(self, travelTime, capacity, source, sourceIndex, destination, destinationIndex):
+        train = Train(self.env, travelTime, capacity, source, sourceIndex, destination, destinationIndex)
+        train.activate()
+        return train
+
     def __init__(self, env):
         self.env = env
         env.total_resources = 0.0
 
-        #railway station mining
-        self.miningRailwayStation = RailwayStation(env, self.MINING_STORAGE_SIZE, 1, False)
-
-        #railway station for fabric
-        self.fabricRailwayStation = RailwayStation(env, self.FABRIC_STORAGE_SIZE, 1, True)
+        # miners
+        miner_1 = self.getDefaultRudeMiner()
+        miner_2 = self.getDefaultRudeMiner()
+        miner_3 = self.getDefaultRudeMiner()
+        miner_4 = self.getDefaultRudeMiner()
         
-        # minings for source
-        miningCluster = MiningCluster(env, 4)
-        miningCluster.appendToSim(self.miningRailwayStation)
+        #railway buffer for mining
+        mining_buffer = Buffer(self.env, "rude", self.MINING_STORAGE_SIZE, False, True)
 
-        #trains
-        trains = []
-        for _ in range(2):
-            train = Train(env, self.TRANSPORT_TIME_MIN, self.TRANSPORT_TIME_MAX)
-            simuTrain = train.getSimuIterator(self.miningRailwayStation, self.fabricRailwayStation)
-            env.process(simuTrain)
-            trains.append(train)
-        env.trains = trains
-        
+        #fabric buffer
+        fabric_buffer = Buffer(self.env, "rude", self.FABRIC_STORAGE_SIZE, True, False)
+
         #fabric
 
         #export
         fabricExports = []
-        exportSlitok = FabricExport("slitok", 3560, 4*32*200*2, "null")
+        exportSlitok = FabricExport("slitok", 3560, 4*32*200*2, None)
         fabricExports.append(exportSlitok)
 
         #import
         fabricImports = []
-        importRude = FabricImport("rude", 1920, 4*32*200*2, self.fabricRailwayStation, 800)
+        importRude = FabricImport("rude", 1920, 4*32*200*2)
         fabricImports.append(importRude)
 
         #reciept
@@ -67,6 +77,26 @@ class MiningSystem:
         self.fabric = Fabric(env, fabricReciept)
         fabric = self.fabric.getSimuIterator()
         env.process(fabric)
+
+        #teleport for each miner
+        self.getDefaultTeleport(miner_1, 1, mining_buffer, 1, 480, 50)
+        self.getDefaultTeleport(miner_2, 1, mining_buffer, 1, 480, 50)
+        self.getDefaultTeleport(miner_3, 1, mining_buffer, 1, 480, 50)
+        self.getDefaultTeleport(miner_4, 1, mining_buffer, 1, 480, 50)
+
+        #trains
+        for _ in range(2):
+            self.getTrain(10.0, 7500, mining_buffer, 1, fabric_buffer, 1)
+
+        # sink for slitoks
+        sink = Sink(env)
+
+        #teleport from fabric storage to fabric
+        self.getDefaultTeleport(fabric_buffer, 1, self.fabric, 1, 1000, 100)
+
+        #teleport from fabric to sink
+        self.getDefaultTeleport(self.fabric, 1, sink, 1, 150, 10)
+        self.getDefaultTeleport(self.fabric, 1, sink, 1, 150, 10)
         
 class SimulationThread(Thread):
     
@@ -95,12 +125,12 @@ class SimulationThread(Thread):
                 self.current_time = self.env.now
                 self.total_resources = self.env.total_resources
                 averageTrainLoad = 0
-                for train in self.env.trains:
-                    averageTrainLoad = (averageTrainLoad + train.AVERAGE_LOAD) / 2
+                #for train in self.env.trains:
+                #    averageTrainLoad = (averageTrainLoad + train.AVERAGE_LOAD) / 2
                 self.average_train_load = averageTrainLoad
 
             # Небольшая пауза для избежания 100% загрузки CPU
-            time.sleep(0.0001)
+            time.sleep(0.01)
             
     def stop(self):
         """Остановка симуляции"""
