@@ -1,7 +1,7 @@
 class Teleport:
     def __init__(self, env, transportPerMinute, frame, source, sourceIndex, destination, destinationIndex):
         self.env = env
-        self.delay = 1 / transportPerMinute
+        self.delay = 1 / transportPerMinute * frame
         self.source = source
         self.sourceIndex = sourceIndex
         self.destination = destination

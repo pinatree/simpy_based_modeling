@@ -9,12 +9,13 @@ from material_flow.node.generator.resource_generator import ResourceGenerator
 
 # Импортируем ваши классы
 from material_flow.transport.train import Train
-from fabric.fabric import Fabric
-from fabric.fabric_export import FabricExport
-from fabric.fabric_import import FabricImport
-from fabric.fabric_reciept import FabricReciept
+from material_flow.node.fabric.fabric import Fabric
+from material_flow.node.fabric.fabric_export import FabricExport
+from material_flow.node.fabric.fabric_import import FabricImport
+from material_flow.node.fabric.fabric_reciept import FabricReciept
 from material_flow.transport.teleport import Teleport
 from material_flow.node.buffer.buffer import Buffer
+from material_flow.node.sink.sink import Sink
 
 # ========== КОНСТАНТЫ ==========
 UPDATE_INTERVAL = 100  # 0.1 секунды в миллисекундах
@@ -87,49 +88,15 @@ class MiningSystem:
         for _ in range(2):
             self.getTrain(10.0, 7500, mining_buffer, 1, fabric_buffer, 1)
 
+        # sink for slitoks
+        sink = Sink(env)
+
         #teleport from fabric storage to fabric
         self.getDefaultTeleport(fabric_buffer, 1, self.fabric, 1, 1000, 100)
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        
+        #teleport from fabric to sink
+        self.getDefaultTeleport(self.fabric, 1, sink, 1, 150, 10)
+        self.getDefaultTeleport(self.fabric, 1, sink, 1, 150, 10)
         
 class SimulationThread(Thread):
     
