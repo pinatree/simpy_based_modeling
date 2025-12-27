@@ -7,6 +7,8 @@ from threading import Thread, Lock
 import time
 from material_flow.node.generator.resource_generator import ResourceGenerator
 
+import json
+
 # Импортируем ваши классы
 from material_flow.transport.train import Train
 from material_flow.node.fabric.fabric import Fabric
@@ -22,14 +24,9 @@ UPDATE_INTERVAL = 100  # 0.1 секунды в миллисекундах
 SIMULATION_SPEED = 1000 # Коэффициент ускорения симуляции
 
 class MiningSystem:
-    MINING_STORAGE_SIZE = 4*32*200*2
-    FABRIC_STORAGE_SIZE = 4*32*200*2
-    
-    TRANSPORT_TIME_MIN = 20.0
-    TRANSPORT_TIME_MAX = 30.0
 
-    def getDefaultRudeMiner(self):
-        resourceGenerator = ResourceGenerator(self.env, "rude", 480, 48, 200)
+    def getDefaultRudeMiner(self, resourceType, miningSpeed, miningFrame, capacity):
+        resourceGenerator = ResourceGenerator(self.env, resourceType, miningSpeed, miningFrame, capacity)
         resourceGenerator.activate()
         return resourceGenerator
     
@@ -38,66 +35,98 @@ class MiningSystem:
         teleport.activate()
         return teleport
     
-    def getTrain(self, travelTime, capacity, source, sourceIndex, destination, destinationIndex):
-        train = Train(self.env, travelTime, capacity, source, sourceIndex, destination, destinationIndex)
+    def getTrain(self, minTravelTime, maxTravelTime, capacity, source, sourceIndex, destination, destinationIndex):
+        train = Train(self.env, minTravelTime, maxTravelTime, capacity, source, sourceIndex, destination, destinationIndex)
         train.activate()
         return train
 
     def __init__(self, env):
+
         self.env = env
+
         env.total_resources = 0.0
-
-        # miners
-        miner_1 = self.getDefaultRudeMiner()
-        miner_2 = self.getDefaultRudeMiner()
-        miner_3 = self.getDefaultRudeMiner()
-        miner_4 = self.getDefaultRudeMiner()
         
-        #railway buffer for mining
-        mining_buffer = Buffer(self.env, "rude", self.MINING_STORAGE_SIZE, False, True)
+        with open('tests/demo.json', 'r', encoding='utf-8') as file:
+            data = json.load(file)
 
-        #fabric buffer
-        fabric_buffer = Buffer(self.env, "rude", self.FABRIC_STORAGE_SIZE, True, False)
+        jsonNodes = data["nodes"]
 
-        #fabric
+        nodes = []
 
-        #export
-        fabricExports = []
-        exportSlitok = FabricExport("slitok", 3560, 4*32*200*2, None)
-        fabricExports.append(exportSlitok)
+        for node in jsonNodes:
+            nodeType = node["type"]
+            if nodeType == "source":
+                resourceType = node["resourceType"]
+                miningSpeed = node["miningSpeed"]
+                miningFrame = node["miningFrame"]
+                capacity = node["internalStorageCapacity"]
+                miner = self.getDefaultRudeMiner(resourceType, miningSpeed, miningFrame, capacity)
+                nodes.append(miner)
+            if nodeType == "simple_storage":
+                resourceType = node["resourceType"]
+                importLock = node["importLock"]
+                importLockDelay = node["importLockDelay"]
+                exportLock = node["exportLock"]
+                exportLockDelay = node["exportLockDelay"]
+                capacity = node["capacity"]
+                simpleStorage = Buffer(self.env, resourceType, capacity, importLock, exportLock, importLockDelay, exportLockDelay)
+                nodes.append(simpleStorage)
+            if nodeType == "fabric":
+                print(node)
+                imports = []
+                exports = []
+                jsonImports = node["imports"]
+                for jsonImport in jsonImports:
+                    resourceType = jsonImport["resourceType"]
+                    minForReciept = jsonImport["minForReciept"]
+                    internalCapacity = jsonImport["internalCapacity"]
+                    newImport = FabricImport(resourceType, minForReciept, internalCapacity)
+                    imports.append(newImport)
+                jsonExports = node["exports"]
+                for jsonExport in jsonExports:
+                    resourceType = jsonExport["resourceType"]
+                    minForReciept = jsonExport["outPerReciept"]
+                    internalCapacity = jsonExport["internalCapacity"]
+                    newExport = FabricExport(resourceType, minForReciept, internalCapacity)
+                    exports.append(newExport)
+                recieptData = node["reciept"]
+                duration = recieptData["delay"]
+                fabricReciept = FabricReciept(imports, exports, duration)
+                fabric = Fabric(self.env, fabricReciept)
+                fabricIterator = fabric.getSimuIterator()
+                env.process(fabricIterator)
+                nodes.append(fabric)
+            if nodeType == "sink":
+                resourceType = node["resourceType"]
+                sink = Sink(env, resourceType)
+                nodes.append(sink)
 
-        #import
-        fabricImports = []
-        importRude = FabricImport("rude", 1920, 4*32*200*2)
-        fabricImports.append(importRude)
+        jsonTransport = data["transport"]
 
-        #reciept
-        fabricReciept = FabricReciept(fabricImports, fabricExports, 1)
+        transports = []
 
-        self.fabric = Fabric(env, fabricReciept)
-        fabric = self.fabric.getSimuIterator()
-        env.process(fabric)
-
-        #teleport for each miner
-        self.getDefaultTeleport(miner_1, 1, mining_buffer, 1, 480, 50)
-        self.getDefaultTeleport(miner_2, 1, mining_buffer, 1, 480, 50)
-        self.getDefaultTeleport(miner_3, 1, mining_buffer, 1, 480, 50)
-        self.getDefaultTeleport(miner_4, 1, mining_buffer, 1, 480, 50)
-
-        #trains
-        for _ in range(2):
-            self.getTrain(10.0, 7500, mining_buffer, 1, fabric_buffer, 1)
-
-        # sink for slitoks
-        sink = Sink(env)
-
-        #teleport from fabric storage to fabric
-        self.getDefaultTeleport(fabric_buffer, 1, self.fabric, 1, 1000, 100)
-
-        #teleport from fabric to sink
-        self.getDefaultTeleport(self.fabric, 1, sink, 1, 150, 10)
-        self.getDefaultTeleport(self.fabric, 1, sink, 1, 150, 10)
-        
+        for transport in jsonTransport:
+            transportType = transport["type"]
+            if transportType == "teleport":
+                fromId = transport["from_id"]
+                from_endpoint = transport["from_endpoint"]
+                toId = transport["to_id"]
+                to_endpoint = transport["to_endpoint"]
+                perMinute = transport["data"]["perMinute"]
+                frame = transport["data"]["frame"]
+                teleport = self.getDefaultTeleport(nodes[fromId], from_endpoint, nodes[toId], to_endpoint, perMinute, frame)
+                transports.append(teleport)
+            if transportType == "train":
+                fromId = transport["from_id"]
+                from_endpoint = transport["from_endpoint"]
+                toId = transport["to_id"]
+                to_endpoint = transport["to_endpoint"]
+                limit = transport["data"]["limit"]
+                minDelay = transport["data"]["min_delay"]
+                maxDelay = transport["data"]["max_delay"]
+                train = self.getTrain(minDelay, maxDelay, limit, nodes[fromId], from_endpoint, nodes[toId], to_endpoint)
+                transports.append(train)
+     
 class SimulationThread(Thread):
     
     def __init__(self):

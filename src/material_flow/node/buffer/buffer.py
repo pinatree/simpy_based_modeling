@@ -4,10 +4,7 @@ from material_flow.node.import_endpoint import ImportEndpoint
 
 class Buffer:
 
-    LOAD_TIME = 1.0
-    UNLOAD_TIME = 1.0
-
-    def __init__(self, env, resourceGuid, bufferSize, lockingImport, lockingExport):
+    def __init__(self, env, resourceGuid, bufferSize, lockingImport, lockingExport, importLocklDelay, exportLockDelay):
         self.resourceGuid = resourceGuid
         self.bufferSize = bufferSize
         self.accumulatedResources = 0
@@ -15,6 +12,8 @@ class Buffer:
         self.container = simpy.Container(self.env, self.bufferSize, 0)
         self.lockingImport = lockingImport
         self.lockingExport = lockingExport
+        self.importLocklDelay = importLocklDelay
+        self.exportLockDelay = exportLockDelay
         
         # Ресурсы для блокировок
         self.import_resource = simpy.Resource(env, 1) if lockingImport else None
@@ -45,7 +44,7 @@ class Buffer:
             request = self.export_resource.request()
             yield request
 
-            yield self.env.timeout(self.UNLOAD_TIME)
+            yield self.env.timeout(self.exportLockDelay)
             
             try:
                 # Получаем ресурсы из контейнера
@@ -63,7 +62,7 @@ class Buffer:
             request = self.import_resource.request()
             yield request
 
-            yield self.env.timeout(self.LOAD_TIME)
+            yield self.env.timeout(self.importLocklDelay)
             
             try:
                 # Добавляем ресурсы в контейнер

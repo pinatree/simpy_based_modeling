@@ -1,8 +1,10 @@
+import random
+
 class Train:
 
-    def __init__(self, env, travelTime, capacity, source, sourceIndex, destination, destinationIndex):
+    def __init__(self, env, minTravelTime, maxTravelTime, capacity, source, sourceIndex, destination, destinationIndex):
         self.env = env
-        self.travelTime = travelTime
+        self.travelTime = random.uniform(minTravelTime, maxTravelTime)
         self.capacity = capacity
         self.source = source
         self.sourceIndex = sourceIndex
