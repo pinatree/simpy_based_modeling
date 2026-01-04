@@ -18,7 +18,10 @@ def getSimulation(simulationId):
 @bp.route('/<int:simulationId>/<simulationNodeType>/<int:simulationNodeId>')
 def getSimulationNode(simulationId, simulationNodeType, simulationNodeId):
     simCore = ModelingCoresSingletone.get(simulationId)
-    return jsonify(simCore.getEntityStatus(simulationNodeType, simulationNodeId))
+    time = simCore.env.now
+    nodeStatus = simCore.getEntityStatus(simulationNodeType, simulationNodeId)
+    nodeStatus["time"] = time
+    return jsonify(nodeStatus)
 
 @bp.route('/', methods=['POST'])
 def runSimulation():
