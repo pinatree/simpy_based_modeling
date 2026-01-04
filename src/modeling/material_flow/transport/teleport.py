@@ -16,3 +16,10 @@ class Teleport:
             yield self.source.getResources(self.sourceIndex, self.frame)
             yield self.env.timeout(self.delay)
             yield self.destination.putResources(self.destinationIndex, self.frame)
+
+    
+    def getStatus(self):
+        return {
+            "type": "Transport",
+            "nodeType": "teleport"
+        }

@@ -31,3 +31,9 @@ class Fabric:
             #export
             for index, fabricExport in enumerate(self.exportDestinations):
                 yield fabricExport.put(self.fabricReciept.fabricExports[index - 1].exportPerReciept)
+    
+    def getStatus(self):
+        return {
+            "type": "Node",
+            "nodeType": "fabric"
+        }

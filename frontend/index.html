@@ -1,0 +1,1181 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Производственная схема обработки железной руды с масштабированием</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            overflow: hidden;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            width: 100%;
+            max-width: 1200px;
+        }
+        
+        h1 {
+            color: #2c3e50;
+            margin-bottom: 10px;
+            font-size: 2.2rem;
+        }
+        
+        .description {
+            color: #555;
+            font-size: 1.1rem;
+            line-height: 1.5;
+            max-width: 800px;
+            margin: 0 auto 20px;
+        }
+        
+        .legend {
+            background-color: white;
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+            width: 100%;
+            max-width: 1200px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            justify-content: center;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-right: 15px;
+        }
+        
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            margin-right: 8px;
+            border-radius: 4px;
+        }
+        
+        .controls {
+            background-color: white;
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+            width: 100%;
+            max-width: 1200px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .zoom-controls {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .control-buttons {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        
+        button {
+            padding: 10px 20px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+        
+        button:hover {
+            background-color: #2980b9;
+        }
+        
+        button.reset {
+            background-color: #e74c3c;
+        }
+        
+        button.reset:hover {
+            background-color: #c0392b;
+        }
+        
+        button.zoom-btn {
+            padding: 8px 16px;
+            font-size: 18px;
+            font-weight: bold;
+            background-color: #2c3e50;
+        }
+        
+        button.zoom-btn:hover {
+            background-color: #1a252f;
+        }
+        
+        #flowchart-container {
+            width: 100%;
+            max-width: 1200px;
+            height: 700px;
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.15);
+            overflow: hidden;
+            position: relative;
+            border: 1px solid #ddd;
+        }
+        
+        .node {
+            cursor: move;
+            transition: filter 0.2s;
+        }
+        
+        .node:hover {
+            filter: brightness(1.05);
+        }
+        
+        .node rect {
+            stroke-width: 2px;
+            stroke: #2c3e50;
+            rx: 8;
+            ry: 8;
+        }
+        
+        .node text {
+            font-weight: 500;
+            font-size: 14px;
+            pointer-events: none;
+            user-select: none;
+        }
+        
+        .node text.title {
+            font-weight: 600;
+            font-size: 16px;
+            fill: white;
+        }
+        
+        .node text.details {
+            font-size: 12px;
+            fill: #f0f0f0;
+        }
+        
+        .link {
+            fill: none;
+            stroke-width: 3px;
+            marker-end: url(#arrowhead);
+        }
+        
+        .link.teleport {
+            stroke: #3498db;
+            stroke-dasharray: 5,5;
+        }
+        
+        .link.train {
+            stroke: #2ecc71;
+        }
+        
+        .link-label {
+            font-size: 12px;
+            font-weight: bold;
+            fill: #2c3e50;
+            text-anchor: middle;
+            pointer-events: none;
+            user-select: none;
+        }
+        
+        .instructions {
+            margin-top: 25px;
+            background-color: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 1200px;
+        }
+        
+        .instructions h3 {
+            color: #2c3e50;
+            margin-top: 0;
+        }
+        
+        .instructions ul {
+            padding-left: 20px;
+            line-height: 1.6;
+        }
+        
+        .instructions li {
+            margin-bottom: 8px;
+        }
+        
+        .footer {
+            margin-top: 20px;
+            color: #7f8c8d;
+            font-size: 0.9rem;
+            text-align: center;
+        }
+        
+        .data-panel {
+            margin-top: 20px;
+            background-color: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 1200px;
+        }
+        
+        .data-panel h3 {
+            color: #2c3e50;
+            margin-top: 0;
+        }
+        
+        .resource-tag {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-right: 5px;
+            margin-bottom: 5px;
+        }
+        
+        .iron-rude-tag {
+            background-color: #8B4513;
+            color: white;
+        }
+        
+        .iron-ingot-tag {
+            background-color: #A9A9A9;
+            color: white;
+        }
+        
+        .zoom-info {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            background-color: rgba(255, 255, 255, 0.8);
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 14px;
+            z-index: 100;
+        }
+        
+        .zoom-overlay {
+            fill: none;
+            pointer-events: all;
+        }
+        
+        .help-text {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background-color: rgba(255, 255, 255, 0.8);
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 12px;
+            z-index: 100;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Производственная схема обработки железной руды</h1>
+        <p class="description">
+            Визуализация производственного процесса от добычи железной руды до получения железных слитков
+        </p>
+    </div>
+    
+    <div class="legend">
+        <div class="legend-item">
+            <div class="legend-color" style="background-color: #e74c3c;"></div>
+            <span>Источник (source)</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background-color: #f39c12;"></div>
+            <span>Хранилище (simple_storage)</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background-color: #9b59b6;"></div>
+            <span>Фабрика (fabric)</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background-color: #1abc9c;"></div>
+            <span>Потребитель (sink)</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background-color: #3498db; border: 1px dashed #2c3e50;"></div>
+            <span>Телепорт (teleport)</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background-color: #2ecc71;"></div>
+            <span>Поезд (train)</span>
+        </div>
+    </div>
+    
+    <div class="data-panel">
+        <h3>Ресурсы в системе:</h3>
+        <span class="resource-tag iron-rude-tag">Железная руда (iron_rude)</span>
+        <span class="resource-tag iron-ingot-tag">Железный слиток (iron_ingot)</span>
+    </div>
+    
+    <div class="controls">
+        <div class="zoom-controls">
+            <button class="zoom-btn" id="zoom-in" title="Увеличить">+</button>
+            <button class="zoom-btn" id="zoom-out" title="Уменьшить">−</button>
+            <button class="zoom-btn" id="reset-zoom" title="Сбросить масштаб">⟲</button>
+            <button class="zoom-btn" id="pan-left" title="Панорамировать влево">←</button>
+            <button class="zoom-btn" id="pan-right" title="Панорамировать вправо">→</button>
+            <button class="zoom-btn" id="pan-up" title="Панорамировать вверх">↑</button>
+            <button class="zoom-btn" id="pan-down" title="Панорамировать вниз">↓</button>
+        </div>
+        
+        <div class="control-buttons">
+            <button id="add-connection">Добавить связь</button>
+            <button id="remove-connection">Удалить связь</button>
+            <button id="change-color">Изменить цвет узлов</button>
+            <button class="reset" id="reset-all">Сбросить всё</button>
+        </div>
+    </div>
+    
+    <div id="flowchart-container">
+        <div class="help-text">
+            Управление: Колесико мыши - масштаб, ЛКМ+перетаскивание - панорамирование
+        </div>
+        <div class="zoom-info" id="zoom-info">Масштаб: 100%</div>
+    </div>
+    
+    <div class="instructions">
+        <h3>Управление масштабированием:</h3>
+        <ul>
+            <li><strong>Масштабирование колесиком мыши</strong>: Прокрутите колесико вверх/вниз для увеличения/уменьшения</li>
+            <li><strong>Панорамирование</strong>: Зажмите левую кнопку мыши и перемещайте схему</li>
+            <li><strong>Кнопки управления</strong>: Используйте кнопки + и - для изменения масштаба</li>
+            <li><strong>Кнопки панорамирования</strong>: Используйте стрелки для перемещения по схеме</li>
+            <li><strong>Сброс масштаба</strong>: Кнопка ⟲ вернет исходный вид</li>
+            <li><strong>Перетаскивание узлов</strong>: Перетаскивайте узлы для изменения расположения схемы</li>
+        </ul>
+    </div>
+    
+    <div class="footer">
+        Создано с использованием D3.js | Производственная схема обработки железной руды с масштабированием
+    </div>
+
+    <script>
+        // Проверяем, загружена ли библиотека D3
+        if (typeof d3 === 'undefined') {
+            console.error('Библиотека D3.js не загружена!');
+            const script = document.createElement('script');
+            script.src = 'https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js';
+            script.onload = initFlowchart;
+            document.head.appendChild(script);
+        } else {
+            initFlowchart();
+        }
+
+        function initFlowchart() {
+            console.log('D3.js загружена, версия:', d3.version);
+            
+            // Структура данных
+            const data = {
+                "node_types": ["source", "simple_storage", "fabric", "sink"],
+                "transport_types": ["teleport", "train"],
+                "data_types": ["iron_rude", "iron_ingot"],
+                "nodes": [
+                    {
+                        "id": 0,
+                        "type": "source",
+                        "imports": [],
+                        "resourceType": "iron_rude",
+                        "miningSpeed": 480,
+                        "miningFrame": 48,
+                        "internalStorageCapacity": 200
+                    },
+                    {
+                        "id": 1,
+                        "type": "source",
+                        "imports": [],
+                        "resourceType": "iron_rude",
+                        "miningSpeed": 480,
+                        "miningFrame": 48,
+                        "internalStorageCapacity": 200
+                    },
+                    {
+                        "id": 2,
+                        "type": "source",
+                        "imports": [],
+                        "resourceType": "iron_rude",
+                        "miningSpeed": 480,
+                        "miningFrame": 48,
+                        "internalStorageCapacity": 200
+                    },
+                    {
+                        "id": 3,
+                        "type": "source",
+                        "imports": [],
+                        "resourceType": "iron_rude",
+                        "miningSpeed": 480,
+                        "miningFrame": 48,
+                        "internalStorageCapacity": 200
+                    },
+                    {
+                        "id": 4,
+                        "type": "simple_storage",
+                        "resourceType": "iron_rude",
+                        "importLock": false,
+                        "importLockDelay": 0,
+                        "exportLock": true,
+                        "exportLockDelay": 1,
+                        "capacity": 51200
+                    },
+                    {
+                        "id": 5,
+                        "type": "simple_storage",
+                        "resourceType": "iron_rude",
+                        "importLock": true,
+                        "importLockDelay": 1,
+                        "exportLock": false,
+                        "exportLockDelay": 0,
+                        "capacity": 51200
+                    },
+                    {
+                        "id": 6,
+                        "type": "fabric",
+                        "imports": [
+                            {
+                                "id": 0,
+                                "resourceType": "iron_rude",
+                                "minForReciept": 1920,
+                                "internalCapacity": 51200
+                            }
+                        ],
+                        "exports": [
+                            {
+                                "id": 0,
+                                "resourceType": "iron_ingot",
+                                "outPerReciept": 3560,
+                                "internalCapacity": 51200
+                            }
+                        ],
+                        "reciept": {
+                            "delay": 2.0
+                        }
+                    },
+                    {
+                        "id": 7,
+                        "type": "sink",
+                        "resourceType": "iron_ingot"
+                    }
+                ],
+                "transport": [
+                    {
+                        "type": "teleport",
+                        "from_id": 0,
+                        "from_endpoint": 0,
+                        "to_id": 4,
+                        "to_endpoint": 0,
+                        "data": {
+                            "perMinute": 480,
+                            "frame": 48
+                        }
+                    },
+                    {
+                        "id": 1,
+                        "type": "teleport",
+                        "from_id": 1,
+                        "from_endpoint": 0,
+                        "to_id": 4,
+                        "to_endpoint": 0,
+                        "data": {
+                            "perMinute": 480,
+                            "frame": 48
+                        }
+                    },
+                    {
+                        "id": 2,
+                        "type": "teleport",
+                        "from_id": 2,
+                        "from_endpoint": 0,
+                        "to_id": 4,
+                        "to_endpoint": 0,
+                        "data": {
+                            "perMinute": 480,
+                            "frame": 48
+                        }
+                    },
+                    {
+                        "id": 3,
+                        "type": "teleport",
+                        "from_id": 3,
+                        "from_endpoint": 0,
+                        "to_id": 4,
+                        "to_endpoint": 0,
+                        "data": {
+                            "perMinute": 480,
+                            "frame": 48
+                        }
+                    },
+                    {
+                        "id": 4,
+                        "type": "teleport",
+                        "from_id": 5,
+                        "from_endpoint": 0,
+                        "to_id": 6,
+                        "to_endpoint": 0,
+                        "data": {
+                            "perMinute": 1000,
+                            "frame": 100
+                        }
+                    },
+                    {
+                        "id": 5,
+                        "type": "teleport",
+                        "from_id": 6,
+                        "from_endpoint": 0,
+                        "to_id": 7,
+                        "to_endpoint": 0,
+                        "data": {
+                            "perMinute": 1000,
+                            "frame": 100
+                        }
+                    },
+                    {
+                        "id": 6,
+                        "type": "train",
+                        "from_id": 4,
+                        "from_endpoint": 0,
+                        "to_id": 5,
+                        "to_endpoint": 0,
+                        "data": {
+                            "limit": 2000,
+                            "min_delay": 20.0,
+                            "max_delay": 30.0
+                        }
+                    },
+                    {
+                        "id": 7,
+                        "type": "train",
+                        "from_id": 4,
+                        "from_endpoint": 0,
+                        "to_id": 5,
+                        "to_endpoint": 0,
+                        "data": {
+                            "limit": 2000,
+                            "min_delay": 20.0,
+                            "max_delay": 30.0
+                        }
+                    },
+                    {
+                        "id": 8,
+                        "type": "train",
+                        "from_id": 4,
+                        "from_endpoint": 0,
+                        "to_id": 5,
+                        "to_endpoint": 0,
+                        "data": {
+                            "limit": 2000,
+                            "min_delay": 20.0,
+                            "max_delay": 30.0
+                        }
+                    }
+                ]
+            };
+
+            // Подготовка узлов
+            const nodes = data.nodes.map(node => {
+                let color, width, height;
+                
+                // Определяем цвет и размер в зависимости от типа узла
+                switch(node.type) {
+                    case 'source':
+                        color = '#e74c3c';
+                        width = 180;
+                        height = 100;
+                        break;
+                    case 'simple_storage':
+                        color = '#f39c12';
+                        width = 200;
+                        height = 120;
+                        break;
+                    case 'fabric':
+                        color = '#9b59b6';
+                        width = 220;
+                        height = 140;
+                        break;
+                    case 'sink':
+                        color = '#1abc9c';
+                        width = 180;
+                        height = 100;
+                        break;
+                    default:
+                        color = '#3498db';
+                        width = 160;
+                        height = 100;
+                }
+                
+                return {
+                    ...node,
+                    x: 0, // будем задавать позже
+                    y: 0, // будем задавать позже
+                    color,
+                    width,
+                    height,
+                    // Формируем текст для отображения
+                    displayText: getNodeDisplayText(node),
+                    // Добавляем исходные координаты для сброса
+                    originalX: 0,
+                    originalY: 0
+                };
+            });
+            
+            // Функция для формирования текста узла
+            function getNodeDisplayText(node) {
+                let title = `ID: ${node.id} (${node.type})`;
+                let details = [];
+                
+                if (node.type === 'source') {
+                    details.push(`Ресурс: ${node.resourceType}`);
+                    details.push(`Скорость: ${node.miningSpeed}/мин`);
+                    details.push(`Хранилище: ${node.internalStorageCapacity}`);
+                } else if (node.type === 'simple_storage') {
+                    details.push(`Ресурс: ${node.resourceType}`);
+                    details.push(`Вместимость: ${node.capacity}`);
+                    details.push(`Импорт: ${node.importLock ? 'блок' : 'открыт'}`);
+                    details.push(`Экспорт: ${node.exportLock ? 'блок' : 'открыт'}`);
+                } else if (node.type === 'fabric') {
+                    details.push(`Импорт: ${node.imports[0].resourceType}`);
+                    details.push(`Экспорт: ${node.exports[0].resourceType}`);
+                    details.push(`Рецепт: ${node.imports[0].minForReciept} → ${node.exports[0].outPerReciept}`);
+                    details.push(`Задержка: ${node.reciept.delay}с`);
+                } else if (node.type === 'sink') {
+                    details.push(`Ресурс: ${node.resourceType}`);
+                }
+                
+                return { title, details };
+            }
+            
+            // Подготовка связей
+            const links = data.transport.map(transport => {
+                let strokeColor, strokeDasharray;
+                
+                // Определяем стиль линии в зависимости от типа транспорта
+                if (transport.type === 'teleport') {
+                    strokeColor = '#3498db';
+                    strokeDasharray = '5,5';
+                } else if (transport.type === 'train') {
+                    strokeColor = '#2ecc71';
+                    strokeDasharray = 'none';
+                }
+                
+                // Формируем текст для отображения на связи
+                let label = '';
+                if (transport.data.perMinute) {
+                    label = `${transport.data.perMinute}/мин`;
+                } else if (transport.data.limit) {
+                    label = `Лимит: ${transport.data.limit}`;
+                }
+                
+                return {
+                    ...transport,
+                    source: transport.from_id,
+                    target: transport.to_id,
+                    strokeColor,
+                    strokeDasharray,
+                    label,
+                    // Для train добавляем смещение, чтобы линии не накладывались
+                    offset: transport.type === 'train' ? (transport.id - 6) * 15 : 0
+                };
+            });
+            
+            // Размеры контейнера
+            const container = document.getElementById('flowchart-container');
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+            
+            // Располагаем узлы в логическом порядке
+            // Источники (0-3) слева
+            nodes[0].x = width * 0.15;
+            nodes[0].y = height * 0.2;
+            
+            nodes[1].x = width * 0.15;
+            nodes[1].y = height * 0.4;
+            
+            nodes[2].x = width * 0.15;
+            nodes[2].y = height * 0.6;
+            
+            nodes[3].x = width * 0.15;
+            nodes[3].y = height * 0.8;
+            
+            // Хранилище 4 посередине слева
+            nodes[4].x = width * 0.35;
+            nodes[4].y = height * 0.5;
+            
+            // Хранилище 5 посередине
+            nodes[5].x = width * 0.55;
+            nodes[5].y = height * 0.5;
+            
+            // Фабрика 6 посередине справа
+            nodes[6].x = width * 0.75;
+            nodes[6].y = height * 0.5;
+            
+            // Потребитель 7 справа
+            nodes[7].x = width * 0.9;
+            nodes[7].y = height * 0.5;
+            
+            // Сохраняем исходные позиции
+            nodes.forEach(node => {
+                node.originalX = node.x;
+                node.originalY = node.y;
+            });
+            
+            // Создание SVG
+            const svg = d3.select('#flowchart-container')
+                .append('svg')
+                .attr('width', width)
+                .attr('height', height)
+                .call(d3.zoom()
+                    .scaleExtent([0.1, 5]) // Минимальный и максимальный масштаб
+                    .on('zoom', zoomed))
+                .append('g');
+            
+            // Контейнер для всех элементов схемы
+            const zoomContainer = svg.append('g').attr('class', 'zoom-container');
+            
+            // Добавляем определения для стрелок
+            zoomContainer.append('defs').append('marker')
+                .attr('id', 'arrowhead')
+                .attr('viewBox', '0 -5 10 10')
+                .attr('refX', 8)
+                .attr('refY', 0)
+                .attr('markerWidth', 6)
+                .attr('markerHeight', 6)
+                .attr('orient', 'auto')
+                .append('path')
+                .attr('d', 'M0,-5L10,0L0,5')
+                .attr('fill', '#2c3e50');
+            
+            // Группа для связей
+            const linkGroup = zoomContainer.append('g').attr('class', 'links');
+            
+            // Группа для узлов
+            const nodeGroup = zoomContainer.append('g').attr('class', 'nodes');
+            
+            // Переменные для управления масштабированием
+            let currentTransform = d3.zoomIdentity;
+            let currentScale = 1;
+            
+            // Функция обновления информации о масштабе
+            function updateZoomInfo() {
+                const zoomInfo = document.getElementById('zoom-info');
+                const scalePercent = Math.round(currentScale * 100);
+                zoomInfo.textContent = `Масштаб: ${scalePercent}%`;
+            }
+            
+            // Функция обработки масштабирования
+            function zoomed(event) {
+                currentTransform = event.transform;
+                currentScale = event.transform.k;
+                zoomContainer.attr('transform', event.transform);
+                updateZoomInfo();
+            }
+            
+            // Функция для получения точки выхода из узла (на краю прямоугольника)
+            function getExitPoint(node, targetNode) {
+                const halfWidth = node.width / 2;
+                const halfHeight = node.height / 2;
+                
+                // Определяем, с какой стороны выходить, в зависимости от положения целевого узла
+                const dx = targetNode.x - node.x;
+                const dy = targetNode.y - node.y;
+                
+                // Если целевой узел находится справа
+                if (dx > 0) {
+                    return { x: node.x + halfWidth, y: node.y };
+                }
+                // Если целевой узел находится слева
+                else if (dx < 0) {
+                    return { x: node.x - halfWidth, y: node.y };
+                }
+                // Если на одной вертикали
+                else {
+                    if (dy > 0) {
+                        return { x: node.x, y: node.y + halfHeight };
+                    } else {
+                        return { x: node.x, y: node.y - halfHeight };
+                    }
+                }
+            }
+            
+            // Функция для получения точки входа в узел (на краю прямоугольника)
+            function getEntryPoint(node, sourceNode) {
+                const halfWidth = node.width / 2;
+                const halfHeight = node.height / 2;
+                
+                // Определяем, с какой стороны входить, в зависимости от положения исходного узла
+                const dx = sourceNode.x - node.x;
+                const dy = sourceNode.y - node.y;
+                
+                // Если исходный узел находится справа
+                if (dx > 0) {
+                    return { x: node.x + halfWidth, y: node.y };
+                }
+                // Если исходный узел находится слева
+                else if (dx < 0) {
+                    return { x: node.x - halfWidth, y: node.y };
+                }
+                // Если на одной вертикали
+                else {
+                    if (dy > 0) {
+                        return { x: node.x, y: node.y + halfHeight };
+                    } else {
+                        return { x: node.x, y: node.y - halfHeight };
+                    }
+                }
+            }
+            
+            // Функция для создания пути с прямыми углами (манхэттенские соединения)
+            function createManhattanPath(sourceNode, targetNode, offset = 0) {
+                const start = getExitPoint(sourceNode, targetNode);
+                const end = getEntryPoint(targetNode, sourceNode);
+                
+                // Применяем смещение для параллельных линий
+                const offsetStart = { ...start, y: start.y + offset };
+                const offsetEnd = { ...end, y: end.y + offset };
+                
+                // Вычисляем промежуточные точки для создания пути с прямыми углами
+                // Определяем направление движения
+                const dirX = offsetEnd.x > offsetStart.x ? 1 : -1;
+                const dirY = offsetEnd.y > offsetStart.y ? 1 : -1;
+                
+                // Первый сегмент - горизонтальный
+                const midX1 = offsetStart.x + dirX * Math.abs(offsetEnd.x - offsetStart.x) / 2;
+                const midY1 = offsetStart.y;
+                
+                // Второй сегмент - вертикальный
+                const midX2 = midX1;
+                const midY2 = offsetEnd.y;
+                
+                // Строим путь с прямыми углами
+                return `M ${offsetStart.x} ${offsetStart.y} 
+                        H ${midX1} 
+                        V ${midY2} 
+                        H ${offsetEnd.x}`;
+            }
+            
+            // Функция обновления блок-схемы
+            function updateFlowchart() {
+                // Обновляем связи
+                const linkSelection = linkGroup.selectAll('.link')
+                    .data(links, d => `${d.type}-${d.from_id}-${d.to_id}-${d.id || 0}`);
+                
+                // Удаляем лишние связи
+                linkSelection.exit().remove();
+                
+                // Добавляем новые связи
+                const linkEnter = linkSelection.enter()
+                    .append('path')
+                    .attr('class', d => `link ${d.type}`);
+                
+                // Объединяем существующие и новые связи
+                const allLinks = linkEnter.merge(linkSelection)
+                    .attr('d', d => {
+                        const sourceNode = nodes.find(n => n.id === d.from_id);
+                        const targetNode = nodes.find(n => n.id === d.to_id);
+                        
+                        if (!sourceNode || !targetNode) return '';
+                        
+                        // Используем манхэттенские соединения (прямые углы)
+                        return createManhattanPath(sourceNode, targetNode, d.offset);
+                    })
+                    .attr('stroke', d => d.strokeColor)
+                    .attr('stroke-dasharray', d => d.strokeDasharray);
+                
+                // Добавляем подписи для связей
+                const labelSelection = linkGroup.selectAll('.link-label')
+                    .data(links.filter(d => d.label), d => `${d.type}-${d.from_id}-${d.to_id}-${d.id || 0}`);
+                
+                labelSelection.exit().remove();
+                
+                const labelEnter = labelSelection.enter()
+                    .append('text')
+                    .attr('class', 'link-label');
+                
+                const allLabels = labelEnter.merge(labelSelection)
+                    .text(d => d.label)
+                    .attr('x', d => {
+                        const sourceNode = nodes.find(n => n.id === d.from_id);
+                        const targetNode = nodes.find(n => n.id === d.to_id);
+                        if (!sourceNode || !targetNode) return 0;
+                        
+                        const start = getExitPoint(sourceNode, targetNode);
+                        const end = getEntryPoint(targetNode, sourceNode);
+                        const midX = start.x + (end.x - start.x) / 2;
+                        return midX;
+                    })
+                    .attr('y', d => {
+                        const sourceNode = nodes.find(n => n.id === d.from_id);
+                        const targetNode = nodes.find(n => n.id === d.to_id);
+                        if (!sourceNode || !targetNode) return 0;
+                        
+                        const start = getExitPoint(sourceNode, targetNode);
+                        const end = getEntryPoint(targetNode, sourceNode);
+                        const offsetY = d.offset || 0;
+                        return (start.y + end.y) / 2 + offsetY - 10;
+                    });
+                
+                // Обновляем узлы
+                const nodeSelection = nodeGroup.selectAll('.node')
+                    .data(nodes, d => d.id);
+                
+                // Удаляем лишние узлы
+                nodeSelection.exit().remove();
+                
+                // Добавляем новые узлы
+                const nodeEnter = nodeSelection.enter()
+                    .append('g')
+                    .attr('class', 'node')
+                    .attr('transform', d => `translate(${d.x}, ${d.y})`)
+                    .call(d3.drag()
+                        .on('start', dragStarted)
+                        .on('drag', dragged)
+                        .on('end', dragEnded));
+                
+                // Добавляем прямоугольники для узлов
+                nodeEnter.append('rect')
+                    .attr('width', d => d.width)
+                    .attr('height', d => d.height)
+                    .attr('x', d => -d.width/2)
+                    .attr('y', d => -d.height/2)
+                    .attr('fill', d => d.color);
+                
+                // Добавляем текст для узлов (заголовок)
+                nodeEnter.append('text')
+                    .attr('class', 'title')
+                    .attr('text-anchor', 'middle')
+                    .attr('dy', d => -d.height/2 + 25)
+                    .text(d => d.displayText.title);
+                
+                // Добавляем детали для узлов
+                nodeEnter.each(function(d) {
+                    const node = d3.select(this);
+                    const details = d.displayText.details;
+                    
+                    // Добавляем каждую деталь на новой строке
+                    details.forEach((detail, i) => {
+                        node.append('text')
+                            .attr('class', 'details')
+                            .attr('text-anchor', 'middle')
+                            .attr('dy', -d.height/2 + 45 + (i * 15))
+                            .text(detail);
+                    });
+                });
+                
+                // Объединяем существующие и новые узлы
+                const allNodes = nodeEnter.merge(nodeSelection)
+                    .attr('transform', d => `translate(${d.x}, ${d.y})`);
+            }
+            
+            // Функции для перетаскивания
+            function dragStarted(event, d) {
+                // Останавливаем распространение события, чтобы не конфликтовать с зумом
+                event.sourceEvent.stopPropagation();
+                d3.select(this).raise();
+            }
+            
+            function dragged(event, d) {
+                d.x = event.x;
+                d.y = event.y;
+                updateFlowchart();
+            }
+            
+            function dragEnded(event, d) {
+                // Ничего не делаем после перетаскивания
+            }
+            
+            // Функции для управления масштабированием
+            function zoomIn() {
+                const svgElement = d3.select('#flowchart-container svg');
+                currentScale = Math.min(5, currentScale * 1.2);
+                svgElement.transition().duration(300).call(
+                    d3.zoom().transform,
+                    d3.zoomIdentity.translate(currentTransform.x, currentTransform.y).scale(currentScale)
+                );
+                updateZoomInfo();
+            }
+            
+            function zoomOut() {
+                const svgElement = d3.select('#flowchart-container svg');
+                currentScale = Math.max(0.1, currentScale / 1.2);
+                svgElement.transition().duration(300).call(
+                    d3.zoom().transform,
+                    d3.zoomIdentity.translate(currentTransform.x, currentTransform.y).scale(currentScale)
+                );
+                updateZoomInfo();
+            }
+            
+            function resetZoom() {
+                const svgElement = d3.select('#flowchart-container svg');
+                currentScale = 1;
+                currentTransform = d3.zoomIdentity;
+                svgElement.transition().duration(300).call(
+                    d3.zoom().transform,
+                    d3.zoomIdentity
+                );
+                updateZoomInfo();
+            }
+            
+            function pan(dx, dy) {
+                const svgElement = d3.select('#flowchart-container svg');
+                currentTransform.x += dx / currentScale;
+                currentTransform.y += dy / currentScale;
+                svgElement.transition().duration(300).call(
+                    d3.zoom().transform,
+                    d3.zoomIdentity.translate(currentTransform.x, currentTransform.y).scale(currentScale)
+                );
+            }
+            
+            // Назначаем обработчики для кнопок масштабирования
+            document.getElementById('zoom-in').addEventListener('click', zoomIn);
+            document.getElementById('zoom-out').addEventListener('click', zoomOut);
+            document.getElementById('reset-zoom').addEventListener('click', resetZoom);
+            document.getElementById('pan-left').addEventListener('click', () => pan(50, 0));
+            document.getElementById('pan-right').addEventListener('click', () => pan(-50, 0));
+            document.getElementById('pan-up').addEventListener('click', () => pan(0, 50));
+            document.getElementById('pan-down').addEventListener('click', () => pan(0, -50));
+            
+            // Обработчики для кнопок управления
+            document.getElementById('add-connection').addEventListener('click', function() {
+                // Находим случайные два узла для соединения
+                const nodeIds = nodes.map(n => n.id);
+                let sourceId, targetId;
+                
+                // Убедимся, что связь еще не существует
+                do {
+                    sourceId = nodeIds[Math.floor(Math.random() * nodeIds.length)];
+                    targetId = nodeIds[Math.floor(Math.random() * nodeIds.length)];
+                } while (
+                    sourceId === targetId || 
+                    links.some(l => l.source === sourceId && l.target === targetId)
+                );
+                
+                const newLink = {
+                    type: Math.random() > 0.5 ? 'teleport' : 'train',
+                    from_id: sourceId,
+                    from_endpoint: 0,
+                    to_id: targetId,
+                    to_endpoint: 0,
+                    data: {
+                        perMinute: Math.floor(Math.random() * 500) + 100,
+                        frame: 48
+                    }
+                };
+                
+                links.push(newLink);
+                updateFlowchart();
+            });
+            
+            document.getElementById('remove-connection').addEventListener('click', function() {
+                if (links.length > 1) {
+                    links.pop();
+                    updateFlowchart();
+                }
+            });
+            
+            document.getElementById('change-color').addEventListener('click', function() {
+                const colors = ['#e74c3c', '#f39c12', '#9b59b6', '#1abc9c', '#3498db', '#2ecc71'];
+                
+                nodes.forEach(node => {
+                    // Выбираем случайный цвет, отличный от текущего
+                    let newColor;
+                    do {
+                        newColor = colors[Math.floor(Math.random() * colors.length)];
+                    } while (newColor === node.color);
+                    
+                    node.color = newColor;
+                });
+                
+                updateFlowchart();
+            });
+            
+            document.getElementById('reset-all').addEventListener('click', function() {
+                // Восстанавливаем исходные позиции узлов
+                nodes.forEach(node => {
+                    node.x = node.originalX;
+                    node.y = node.originalY;
+                });
+                
+                // Восстанавливаем исходные связи
+                while (links.length > data.transport.length) {
+                    links.pop();
+                }
+                
+                // Сбрасываем масштаб
+                resetZoom();
+                
+                updateFlowchart();
+            });
+            
+            // Инициализация блок-схемы
+            updateFlowchart();
+            updateZoomInfo();
+            
+            // Обработчик изменения размера окна
+            window.addEventListener('resize', function() {
+                const newWidth = container.clientWidth;
+                const newHeight = container.clientHeight;
+                
+                d3.select('#flowchart-container svg')
+                    .attr('width', newWidth)
+                    .attr('height', newHeight);
+                
+                // Перераспределяем узлы при изменении размера окна (только если не было изменений пользователем)
+                if (nodes.every((node, i) => node.x === node.originalX && node.y === node.originalY)) {
+                    nodes[0].x = newWidth * 0.15;
+                    nodes[0].y = newHeight * 0.2;
+                    
+                    nodes[1].x = newWidth * 0.15;
+                    nodes[1].y = newHeight * 0.4;
+                    
+                    nodes[2].x = newWidth * 0.15;
+                    nodes[2].y = newHeight * 0.6;
+                    
+                    nodes[3].x = newWidth * 0.15;
+                    nodes[3].y = newHeight * 0.8;
+                    
+                    nodes[4].x = newWidth * 0.35;
+                    nodes[4].y = newHeight * 0.5;
+                    
+                    nodes[5].x = newWidth * 0.55;
+                    nodes[5].y = newHeight * 0.5;
+                    
+                    nodes[6].x = newWidth * 0.75;
+                    nodes[6].y = newHeight * 0.5;
+                    
+                    nodes[7].x = newWidth * 0.9;
+                    nodes[7].y = newHeight * 0.5;
+                    
+                    // Обновляем исходные позиции
+                    nodes.forEach(node => {
+                        node.originalX = node.x;
+                        node.originalY = node.y;
+                    });
+                }
+                
+                updateFlowchart();
+            });
+            
+            console.log('Производственная схема с масштабированием инициализирована успешно!');
+        }
+    </script>
+</body>
+</html>

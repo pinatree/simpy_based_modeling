@@ -1,6 +1,6 @@
 import simpy
-from material_flow.node.export_endpoint import ExportEndpoint
-from material_flow.node.import_endpoint import ImportEndpoint
+from modeling.material_flow.node.export_endpoint import ExportEndpoint
+from modeling.material_flow.node.import_endpoint import ImportEndpoint
 
 class Buffer:
 
@@ -14,12 +14,16 @@ class Buffer:
         self.lockingExport = lockingExport
         self.importLocklDelay = importLocklDelay
         self.exportLockDelay = exportLockDelay
+
+        self.totalIn = 0
+        self.totalOut = 0
         
         # Ресурсы для блокировок
         self.import_resource = simpy.Resource(env, 1) if lockingImport else None
         self.export_resource = simpy.Resource(env, 1) if lockingExport else None
             
     def getResources(self, exportIndex, resourcesCount):
+        self.totalOut = self.totalOut + resourcesCount
         """Получить ресурсы из буфера"""
         if self.lockingExport and self.export_resource:
             # Возвращаем составное событие: сначала захват ресурса, потом получение из контейнера
@@ -29,6 +33,7 @@ class Buffer:
             return self.container.get(resourcesCount)
     
     def putResources(self, inputIndex, resourcesCount):
+        self.totalIn = self.totalIn + resourcesCount
         """Добавить ресурсы в буфер"""
         if self.lockingImport and self.import_resource:
             # Возвращаем составное событие: сначала захват ресурса, потом добавление в контейнер
@@ -82,3 +87,16 @@ class Buffer:
     
     def getExportNodes(self):
         return [ExportEndpoint(self.resourceGuid)]
+    
+    def getStatus(self):
+        return {
+            "type": "Node",
+            "nodeType": "buffer",
+            "importUse": False if self.import_resource == None else len(self.import_resource.users) > 0,
+            "importLocked": False if self.import_resource == None else len(self.import_resource.users) == self.import_resource.capacity,
+            "importUse": False if self.export_resource == None else len(self.export_resource.users) > 0,
+            "importLocked": False if self.export_resource == None else len(self.export_resource.users) == self.export_resource.capacity,
+            "totalIn": self.totalIn,
+            "totalOut": self.totalOut,
+            "currentCount": self.container.level
+        }

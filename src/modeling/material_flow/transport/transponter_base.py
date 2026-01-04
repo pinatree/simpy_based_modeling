@@ -5,3 +5,6 @@ class Transporter:
 
     def runLifeCycle(self):
         raise 'not implemented'
+    
+    def getStatus(self):
+        raise 'not implemented'

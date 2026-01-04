@@ -17,3 +17,6 @@ class MaterialFlowNode:
     
     def getResources(self, exportIndex, resourcesCount):
         raise 'not implemented'
+    
+    def getStatus(self):
+        raise 'not implemented'

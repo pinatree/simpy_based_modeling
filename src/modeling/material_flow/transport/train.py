@@ -10,13 +10,26 @@ class Train:
         self.sourceIndex = sourceIndex
         self.destination = destination
         self.destinationIndex = destinationIndex
+
+        self.status = "GET_RESOURCES"
     
     def activate(self):
         self.env.process(self.runLifeCycle())
 
     def runLifeCycle(self):
         while True:
+            self.status = "GET_RESOURCES"
             yield self.source.getResources(self.sourceIndex, self.capacity)
+            self.status = "TO_DEST"
             yield self.env.timeout(self.travelTime)
+            self.status = "PUT_RESOURCES"
             yield self.destination.putResources(self.destinationIndex, self.capacity)
+            self.status = "TO_BASE"
             yield self.env.timeout(self.travelTime)
+    
+    def getStatus(self):
+        return {
+            "type": "Transport",
+            "nodeType": "train",
+            "currentStatus": self.status
+        }

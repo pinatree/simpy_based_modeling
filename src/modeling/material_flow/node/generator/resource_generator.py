@@ -1,9 +1,11 @@
 import simpy
-from material_flow.node.export_endpoint import ExportEndpoint
+from modeling.material_flow.node.export_endpoint import ExportEndpoint
 
 class ResourceGenerator:
 
     def __init__(self, env, resourceGuid, generatePerMinute, frame, bufferSize):
+        self.generatedCount = 0
+        self.sentCount = 0
         self.resourceGuid = resourceGuid
         self.bufferSize = bufferSize
         self.accumulatedResources = 0
@@ -17,6 +19,7 @@ class ResourceGenerator:
     def runLifeCycle(self):
         self.container = simpy.Container(self.env, self.bufferSize, 0)
         while True:
+            self.generatedCount = self.generatedCount + self.frame
             yield self.container.put(self.frame)
             yield self.env.timeout(self.cooldown)
 
@@ -27,4 +30,15 @@ class ResourceGenerator:
         return [ExportEndpoint(self.resourceGuid)]
     
     def getResources(self, exportIndex, resourcesCount):
+        self.sentCount = self.sentCount + resourcesCount
         return self.container.get(resourcesCount)
+    
+    def getStatus(self):
+        return {
+            "type": "Node",
+            "nodeType": "resourceGenerator",
+            "resource": self.resourceGuid,
+            "generatedCount": self.processedCount,
+            "sentCount": self.sentCount,
+            "currentCount": self.container.level
+        }

@@ -100,7 +100,7 @@
   ],
   "transport": [
     {
-      "id": 0,
+      "id": 1,
       "type": "teleport",
       "from_id": 0,
       "from_endpoint": 0,
@@ -112,7 +112,7 @@
       }
     },
     {
-      "id": 1,
+      "id": 2,
       "type": "teleport",
       "from_id": 1,
       "from_endpoint": 0,
@@ -124,7 +124,7 @@
       }
     },
     {
-      "id": 2,
+      "id": 3,
       "type": "teleport",
       "from_id": 2,
       "from_endpoint": 0,
@@ -136,7 +136,7 @@
       }
     },
     {
-      "id": 3,
+      "id": 4,
       "type": "teleport",
       "from_id": 3,
       "from_endpoint": 0,
@@ -148,7 +148,7 @@
       }
     },
     {
-      "id": 4,
+      "id": 5,
       "type": "teleport",
       "from_id": 5,
       "from_endpoint": 0,
@@ -160,7 +160,7 @@
       }
     },
     {
-      "id": 5,
+      "id": 6,
       "type": "teleport",
       "from_id": 6,
       "from_endpoint": 0,
@@ -169,19 +169,6 @@
       "data": {
         "perMinute": 1000,
         "frame": 100
-      }
-    },
-    {
-      "id": 6,
-      "type": "train",
-      "from_id": 4,
-      "from_endpoint": 0,
-      "to_id": 5,
-      "to_endpoint": 0,
-      "data": {
-        "limit": 2000,
-        "min_delay": 20.0,
-        "max_delay": 30.0
       }
     },
     {
@@ -199,6 +186,19 @@
     },
     {
       "id": 8,
+      "type": "train",
+      "from_id": 4,
+      "from_endpoint": 0,
+      "to_id": 5,
+      "to_endpoint": 0,
+      "data": {
+        "limit": 2000,
+        "min_delay": 20.0,
+        "max_delay": 30.0
+      }
+    },
+    {
+      "id": 9,
       "type": "train",
       "from_id": 4,
       "from_endpoint": 0,
