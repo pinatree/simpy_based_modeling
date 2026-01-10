@@ -8,8 +8,21 @@ bp = Blueprint('simulations', __name__)
 @bp.route('/')
 def getSimulations():
     simulations = ModelingCoresSingletone.getAll()
-    length = len(simulations)
-    return jsonify({"simulationsCount": length})
+    simulationsData = []
+    id = 0
+    for sim in simulations:
+        id = id + 1
+        simData = {
+            "id": id,
+            "name": simulations[sim].name,
+            "caption": simulations[sim].caption,
+            "status": "running",
+            "duration": simulations[sim].getDuration(),
+            "acceleration": "x?????",
+            "modelTime": simulations[sim].getModelTime()
+        }
+        simulationsData.append(simData)
+    return jsonify(simulationsData)
 
 @bp.route('/<int:simulationId>')
 def getSimulation(simulationId):
@@ -27,7 +40,7 @@ def getSimulationNode(simulationId, simulationNodeType, simulationNodeId):
 def runSimulation():
     simulationMap = request.get_json()
     #create core instance with imported map
-    coreInstance = ModelingCore(simulationMap)
+    coreInstance = ModelingCore(simulationMap, simulationMap["name"], simulationMap["caption"])
     #register core instance and set id
     newId = ModelingCoresSingletone.add(coreInstance)
     #start simulation

@@ -1,5 +1,6 @@
 import simpy
 import time
+import datetime
 from threading import Thread
 
 from modeling.material_flow.node.generator.resource_generator import ResourceGenerator
@@ -31,8 +32,19 @@ class ModelingCore:
     
     def getSimuLength(self):
         return self.env.now
+    
+    def getDuration(self):
+        time_diff = datetime.datetime.now() - self.startTime  # Получаем timedelta
+        return time_diff.total_seconds()  # Конвертируем секунды в минуты
+    
+    def getModelTime(self):
+        return self.env.now
 
-    def __init__(self, modelDescription):
+    def __init__(self, modelDescription, name, caption):
+        self.name = name
+        self.caption = caption
+        self.startTime = datetime.datetime.now()
+
         self.running = False
         self.SIMULATION_SPEED = 1
 
@@ -148,7 +160,6 @@ class ModelingCore:
             try:
                 self.env.run(until=self.env.now + self.SIMULATION_SPEED)
                 time.sleep(0.01)
-                print(self.env.now)
             except Exception as e:
                 print(f"Simulation error: {e}")
                 break
