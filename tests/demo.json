@@ -1,0 +1,214 @@
+{
+  "node_types": [
+    "source",
+    "simple_storage",
+    "fabric"
+  ],
+  "transport_types": [
+    "teleport",
+    "train"
+  ],
+  "data_types": [
+    "iron_rude",
+    "iron_ingot"
+  ],
+  "nodes": [
+    {
+      "id": 0,
+      "type": "source",
+      "imports": [],
+      "resourceType": "iron_rude",
+      "miningSpeed": 480,
+      "miningFrame": 48,
+      "internalStorageCapacity": 200
+    },
+    {
+      "id": 1,
+      "type": "source",
+      "imports": [],
+      "resourceType": "iron_rude",
+      "miningSpeed": 480,
+      "miningFrame": 48,
+      "internalStorageCapacity": 200
+    },
+    {
+      "id": 2,
+      "type": "source",
+      "imports": [],
+      "resourceType": "iron_rude",
+      "miningSpeed": 480,
+      "miningFrame": 48,
+      "internalStorageCapacity": 200
+    },
+    {
+      "id": 3,
+      "type": "source",
+      "imports": [],
+      "resourceType": "iron_rude",
+      "miningSpeed": 480,
+      "miningFrame": 48,
+      "internalStorageCapacity": 200
+    },
+    {
+      "id": 4,
+      "type": "simple_storage",
+      "resourceType": "iron_rude",
+      "importLock": false,
+      "importLockDelay": 0,
+      "exportLock": true,
+      "exportLockDelay": 1,
+      "capacity": 51200
+    },
+    {
+      "id": 5,
+      "type": "simple_storage",
+      "resourceType": "iron_rude",
+      "importLock": true,
+      "importLockDelay": 1,
+      "exportLock": false,
+      "exportLockDelay": 0,
+      "capacity": 51200
+    },
+    {
+      "id": 6,
+      "type": "fabric",
+      "imports": [
+        {
+          "id": 0,
+          "resourceType": "iron_rude",
+          "minForReciept": 1920,
+          "internalCapacity": 51200
+        }
+      ],
+      "exports": [
+        {
+          "id": 0,
+          "resourceType": "iron_ingot",
+          "outPerReciept": 3560,
+          "internalCapacity": 51200
+        }
+      ],
+      "reciept": {
+        "delay": 2.0
+      }
+    },
+    {
+      "id": 7,
+      "type": "sink",
+      "resourceType": "iron_ingot"
+    }
+  ],
+  "transport": [
+    {
+      "id": 1,
+      "type": "teleport",
+      "from_id": 0,
+      "from_endpoint": 0,
+      "to_id": 4,
+      "to_endpoint": 0,
+      "data": {
+        "perMinute": 480,
+        "frame": 48
+      }
+    },
+    {
+      "id": 2,
+      "type": "teleport",
+      "from_id": 1,
+      "from_endpoint": 0,
+      "to_id": 4,
+      "to_endpoint": 0,
+      "data": {
+        "perMinute": 480,
+        "frame": 48
+      }
+    },
+    {
+      "id": 3,
+      "type": "teleport",
+      "from_id": 2,
+      "from_endpoint": 0,
+      "to_id": 4,
+      "to_endpoint": 0,
+      "data": {
+        "perMinute": 480,
+        "frame": 48
+      }
+    },
+    {
+      "id": 4,
+      "type": "teleport",
+      "from_id": 3,
+      "from_endpoint": 0,
+      "to_id": 4,
+      "to_endpoint": 0,
+      "data": {
+        "perMinute": 480,
+        "frame": 48
+      }
+    },
+    {
+      "id": 5,
+      "type": "teleport",
+      "from_id": 5,
+      "from_endpoint": 0,
+      "to_id": 6,
+      "to_endpoint": 0,
+      "data": {
+        "perMinute": 1000,
+        "frame": 100
+      }
+    },
+    {
+      "id": 6,
+      "type": "teleport",
+      "from_id": 6,
+      "from_endpoint": 0,
+      "to_id": 7,
+      "to_endpoint": 0,
+      "data": {
+        "perMinute": 1000,
+        "frame": 100
+      }
+    },
+    {
+      "id": 7,
+      "type": "train",
+      "from_id": 4,
+      "from_endpoint": 0,
+      "to_id": 5,
+      "to_endpoint": 0,
+      "data": {
+        "limit": 2000,
+        "min_delay": 20.0,
+        "max_delay": 30.0
+      }
+    },
+    {
+      "id": 8,
+      "type": "train",
+      "from_id": 4,
+      "from_endpoint": 0,
+      "to_id": 5,
+      "to_endpoint": 0,
+      "data": {
+        "limit": 2000,
+        "min_delay": 20.0,
+        "max_delay": 30.0
+      }
+    },
+    {
+      "id": 9,
+      "type": "train",
+      "from_id": 4,
+      "from_endpoint": 0,
+      "to_id": 5,
+      "to_endpoint": 0,
+      "data": {
+        "limit": 2000,
+        "min_delay": 20.0,
+        "max_delay": 30.0
+      }
+    }
+  ]
+}
