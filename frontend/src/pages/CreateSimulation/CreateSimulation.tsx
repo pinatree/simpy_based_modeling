@@ -30,6 +30,7 @@ interface Prefab {
 
 // Размеры блоков
 const BLOCK_SIZE = { width: 225, height: 120 };
+const CONNECTION_POINT_SIZE = 16;
 
 // Интерфейс для блока
 interface Block {
@@ -41,6 +42,23 @@ interface Block {
   productionRate?: number;
 }
 
+// Интерфейс для соединения
+interface Connection {
+  id: number;
+  sourceBlockId: number;
+  targetBlockId: number;
+  sourcePoint: 'output' | 'input';
+  targetPoint: 'output' | 'input';
+}
+
+// Тип для точки соединения
+interface ConnectionPoint {
+  blockId: number;
+  type: 'input' | 'output';
+  x: number;
+  y: number;
+}
+
 // Функция для разбиения текста на строки
 const wrapText = (text: string, maxWidth: number = 180, fontSize: number = 14): string[] => {
   const words = text.split(' ');
@@ -49,7 +67,6 @@ const wrapText = (text: string, maxWidth: number = 180, fontSize: number = 14): 
 
   for (let i = 1; i < words.length; i++) {
     const word = words[i];
-    // Приблизительная ширина текста в пикселях (примерно 0.6 * fontSize на символ)
     const width = (currentLine.length + word.length) * fontSize * 0.6;
     if (width < maxWidth) {
       currentLine += ' ' + word;
@@ -60,20 +77,70 @@ const wrapText = (text: string, maxWidth: number = 180, fontSize: number = 14): 
   }
   lines.push(currentLine);
   
-  // Если слишком много строк, обрезаем и добавляем многоточие
   if (lines.length > 2) {
     return [lines[0], lines[1] + '...'];
   }
   return lines;
 };
 
+// Функция для вычисления координат точек входа/выхода
+const getConnectionPoints = (block: Block): { input: { x: number, y: number }, output: { x: number, y: number } } => {
+  return {
+    input: {
+      x: block.x - CONNECTION_POINT_SIZE / 2,
+      y: block.y + BLOCK_SIZE.height / 2 - CONNECTION_POINT_SIZE / 2
+    },
+    output: {
+      x: block.x + BLOCK_SIZE.width - CONNECTION_POINT_SIZE / 2,
+      y: block.y + BLOCK_SIZE.height / 2 - CONNECTION_POINT_SIZE / 2
+    }
+  };
+};
+
+// Функция для вычисления координат стрелки
+const calculateArrowPath = (
+  sourceBlock: Block, 
+  targetBlock: Block, 
+  sourcePoint: 'input' | 'output', 
+  targetPoint: 'input' | 'output'
+): string => {
+  const sourcePoints = getConnectionPoints(sourceBlock);
+  const targetPoints = getConnectionPoints(targetBlock);
+  
+  const startPoint = sourcePoint === 'output' ? sourcePoints.output : sourcePoints.input;
+  const endPoint = targetPoint === 'input' ? targetPoints.input : targetPoints.output;
+  
+  // Смещения для красивого изгиба
+  const startOffset = sourcePoint === 'output' ? 20 : -20;
+  const endOffset = targetPoint === 'input' ? -20 : 20;
+  
+  const startX = startPoint.x + CONNECTION_POINT_SIZE / 2;
+  const startY = startPoint.y + CONNECTION_POINT_SIZE / 2;
+  const endX = endPoint.x + CONNECTION_POINT_SIZE / 2;
+  const endY = endPoint.y + CONNECTION_POINT_SIZE / 2;
+  
+  // Кривая Безье с контрольными точками
+  const controlPoint1X = startX + startOffset;
+  const controlPoint1Y = startY;
+  const controlPoint2X = endX + endOffset;
+  const controlPoint2Y = endY;
+  
+  return `M ${startX} ${startY} 
+          C ${controlPoint1X} ${controlPoint1Y}, 
+            ${controlPoint2X} ${controlPoint2Y}, 
+            ${endX} ${endY}`;
+};
+
 const CreateSimulation: React.FC = () => {
   const [blocks, setBlocks] = useState<Block[]>([]);
+  const [connections, setConnections] = useState<Connection[]>([]);
   const [nextId, setNextId] = useState<number>(1);
+  const [nextConnectionId, setNextConnectionId] = useState<number>(1);
   const [draggingBlockType, setDraggingBlockType] = useState<string | null>(null);
   const [draggingPrefabId, setDraggingPrefabId] = useState<number | null>(null);
   const [isDraggingFromPanel, setIsDraggingFromPanel] = useState<boolean>(false);
   const [selectedBlockId, setSelectedBlockId] = useState<number | null>(null);
+  const [selectedConnectionId, setSelectedConnectionId] = useState<number | null>(null);
   const [editModalOpen, setEditModalOpen] = useState<boolean>(false);
   const [editingBlock, setEditingBlock] = useState<Block | null>(null);
   const [editName, setEditName] = useState<string>('');
@@ -88,25 +155,36 @@ const CreateSimulation: React.FC = () => {
   const [prefabName, setPrefabName] = useState<string>('');
   const [copiedBlock, setCopiedBlock] = useState<Block | null>(null);
   const [showEditIcon, setShowEditIcon] = useState<number | null>(null);
+  const [connectingFrom, setConnectingFrom] = useState<ConnectionPoint | null>(null);
+  const [hoveredPoint, setHoveredPoint] = useState<{blockId: number, type: 'input' | 'output'} | null>(null);
   
   const svgRef = useRef<SVGSVGElement>(null);
   const d3ContainerRef = useRef<d3.Selection<SVGGElement, unknown, null, undefined> | null>(null);
+  const connectionsContainerRef = useRef<d3.Selection<SVGGElement, unknown, null, undefined> | null>(null);
   const workspaceRef = useRef<HTMLDivElement>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
   const prefabNameInputRef = useRef<HTMLInputElement>(null);
 
-  // Инициализация D3 контейнера
+  // Ссылка для временного соединения
+  const tempConnectionRef = useRef<SVGPathElement>(null);
+
+  // Инициализация D3 контейнеров
   useEffect(() => {
     if (!svgRef.current) return;
 
+    // Контейнер для соединений (должен быть под блоками)
+    connectionsContainerRef.current = d3.select(svgRef.current)
+      .append('g')
+      .attr('class', 'connections-container') as d3.Selection<SVGGElement, unknown, null, undefined>;
+
+    // Контейнер для блоков
     d3ContainerRef.current = d3.select(svgRef.current)
       .append('g')
       .attr('class', 'blocks-container') as d3.Selection<SVGGElement, unknown, null, undefined>;
 
     return () => {
-      if (d3ContainerRef.current) {
-        d3ContainerRef.current.remove();
-      }
+      if (d3ContainerRef.current) d3ContainerRef.current.remove();
+      if (connectionsContainerRef.current) connectionsContainerRef.current.remove();
     };
   }, []);
 
@@ -126,22 +204,113 @@ const CreateSimulation: React.FC = () => {
         pasteBlock();
       }
       
-      // Delete - удалить выделенный блок
-      if (e.key === 'Delete' && selectedBlockId) {
-        if (window.confirm('Вы уверены, что хотите удалить выделенный блок?')) {
-          handleDeleteBlock(selectedBlockId);
+      // Delete - удалить выделенный блок или соединение
+      if (e.key === 'Delete') {
+        if (selectedBlockId) {
+          if (window.confirm('Вы уверены, что хотите удалить выделенный блок?')) {
+            handleDeleteBlock(selectedBlockId);
+          }
+        } else if (selectedConnectionId) {
+          if (window.confirm('Вы уверены, что хотите удалить выделенное соединение?')) {
+            handleDeleteConnection(selectedConnectionId);
+          }
         }
       }
       
-      // Escape - снять выделение
+      // Escape - снять выделение или отменить соединение
       if (e.key === 'Escape') {
         setSelectedBlockId(null);
+        setSelectedConnectionId(null);
+        setConnectingFrom(null);
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [blocks, selectedBlockId, copiedBlock]);
+  }, [blocks, selectedBlockId, selectedConnectionId, copiedBlock, connectingFrom]);
+
+  // Обработка движения мыши при создании соединения
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!connectingFrom || !svgRef.current) return;
+      
+      const svgRect = svgRef.current.getBoundingClientRect();
+      const x = e.clientX - svgRect.left;
+      const y = e.clientY - svgRect.top;
+      
+      // Обновляем временную линию
+      if (tempConnectionRef.current) {
+        const startX = connectingFrom.x;
+        const startY = connectingFrom.y;
+        
+        const path = `M ${startX} ${startY} L ${x} ${y}`;
+        tempConnectionRef.current.setAttribute('d', path);
+      }
+    };
+
+    const handleMouseUp = (e: MouseEvent) => {
+      if (!connectingFrom || !svgRef.current) return;
+      
+      const svgRect = svgRef.current.getBoundingClientRect();
+      const mouseX = e.clientX - svgRect.left;
+      const mouseY = e.clientY - svgRect.top;
+      
+      // Ищем блок, на который упал курсор
+      let targetBlockId: number | null = null;
+      let targetPointType: 'input' | 'output' | null = null;
+      
+      blocks.forEach(block => {
+        const points = getConnectionPoints(block);
+        
+        // Проверяем расстояние до входной точки
+        const inputX = points.input.x + CONNECTION_POINT_SIZE / 2;
+        const inputY = points.input.y + CONNECTION_POINT_SIZE / 2;
+        const inputDistance = Math.sqrt(
+          Math.pow(mouseX - inputX, 2) + Math.pow(mouseY - inputY, 2)
+        );
+        
+        // Проверяем расстояние до выходной точки
+        const outputX = points.output.x + CONNECTION_POINT_SIZE / 2;
+        const outputY = points.output.y + CONNECTION_POINT_SIZE / 2;
+        const outputDistance = Math.sqrt(
+          Math.pow(mouseX - outputX, 2) + Math.pow(mouseY - outputY, 2)
+        );
+        
+        // Если мы близко к точке
+        const threshold = CONNECTION_POINT_SIZE * 2;
+        
+        if (inputDistance < threshold) {
+          targetBlockId = block.id;
+          targetPointType = 'input';
+        } else if (outputDistance < threshold) {
+          targetBlockId = block.id;
+          targetPointType = 'output';
+        }
+      });
+      
+      // Если нашли точку, создаем соединение
+      if (targetBlockId && targetPointType) {
+        createConnection(connectingFrom.blockId, connectingFrom.type, targetBlockId, targetPointType);
+      }
+      
+      // Очищаем временное соединение
+      setConnectingFrom(null);
+      if (tempConnectionRef.current) {
+        tempConnectionRef.current.setAttribute('d', '');
+      }
+    };
+
+    // Добавляем обработчики только при создании соединения
+    if (connectingFrom) {
+      document.addEventListener('mousemove', handleMouseMove as any);
+      document.addEventListener('mouseup', handleMouseUp as any);
+      
+      return () => {
+        document.removeEventListener('mousemove', handleMouseMove as any);
+        document.removeEventListener('mouseup', handleMouseUp as any);
+      };
+    }
+  }, [connectingFrom, blocks]);
 
   // Обновление D3 при изменении блоков
   useEffect(() => {
@@ -167,45 +336,7 @@ const CreateSimulation: React.FC = () => {
       )
       .attr('id', (d: Block) => `block-${d.id}`)
       .attr('transform', (d: Block) => `translate(${d.x}, ${d.y})`)
-      .style('cursor', 'pointer')
-      .call(
-        d3.drag<SVGGElement, Block>()
-          .on('start', function (event, d) {
-            d3.select(this).raise().classed('dragging', true);
-            setSelectedBlockId(d.id);
-          })
-          .on('drag', function (event, d) {
-            const newX = Math.max(0, Math.min(event.x, svgNode.clientWidth - BLOCK_SIZE.width));
-            const newY = Math.max(0, Math.min(event.y, svgNode.clientHeight - BLOCK_SIZE.height));
-            
-            d3.select(this)
-              .attr('transform', `translate(${newX}, ${newY})`);
-            
-            // Обновляем состояние
-            setBlocks(prev => prev.map(block => 
-              block.id === d.id ? { ...block, x: newX, y: newY } : block
-            ));
-          })
-          .on('end', function () {
-            d3.select(this).classed('dragging', false);
-          })
-      )
-      .on('click', function (event, d) {
-        event.stopPropagation();
-        setSelectedBlockId(d.id);
-      })
-      .on('dblclick', function(event, d) {
-        event.stopPropagation();
-        openEditModal(d);
-      })
-      .on('mouseenter', function(event, d) {
-        setShowEditIcon(d.id);
-      })
-      .on('mouseleave', function(event, d) {
-        if (showEditIcon === d.id) {
-          setShowEditIcon(null);
-        }
-      });
+      .style('cursor', 'move');
 
     // Прямоугольник блока
     newBlocks
@@ -243,7 +374,6 @@ const CreateSimulation: React.FC = () => {
       .attr('text-anchor', 'middle')
       .attr('dominant-baseline', 'middle')
       .attr('fill', 'white')
-      .attr('font-weight', 'bold')
       .attr('font-size', '14px')
       .attr('pointer-events', 'none');
 
@@ -293,7 +423,77 @@ const CreateSimulation: React.FC = () => {
       }
     });
 
-    // Иконка редактирования (увеличенная и с лучшей доступностью)
+    // Точка входа (слева)
+    const inputPoint = newBlocks
+      .append('g')
+      .attr('class', 'connection-point input-point')
+      .attr('transform', `translate(${-CONNECTION_POINT_SIZE / 2}, ${BLOCK_SIZE.height / 2 - CONNECTION_POINT_SIZE / 2})`)
+      .style('cursor', 'pointer')
+      .on('mousedown', function(event, d) {
+        event.stopPropagation();
+        handleConnectionPointMouseDown(d.id, 'input');
+      })
+      .on('mouseenter', function(event, d) {
+        setHoveredPoint({ blockId: d.id, type: 'input' });
+      })
+      .on('mouseleave', function() {
+        setHoveredPoint(null);
+      });
+
+    inputPoint
+      .append('circle')
+      .attr('r', CONNECTION_POINT_SIZE / 2)
+      .attr('fill', '#4CAF50')
+      .attr('stroke', 'white')
+      .attr('stroke-width', 2);
+
+    inputPoint
+      .append('text')
+      .attr('x', CONNECTION_POINT_SIZE / 2)
+      .attr('y', CONNECTION_POINT_SIZE / 2)
+      .attr('text-anchor', 'middle')
+      .attr('dominant-baseline', 'middle')
+      .attr('font-size', '12px')
+      .attr('fill', 'white')
+      .attr('pointer-events', 'none')
+      .text('←');
+
+    // Точка выхода (справа)
+    const outputPoint = newBlocks
+      .append('g')
+      .attr('class', 'connection-point output-point')
+      .attr('transform', `translate(${BLOCK_SIZE.width - CONNECTION_POINT_SIZE / 2}, ${BLOCK_SIZE.height / 2 - CONNECTION_POINT_SIZE / 2})`)
+      .style('cursor', 'pointer')
+      .on('mousedown', function(event, d) {
+        event.stopPropagation();
+        handleConnectionPointMouseDown(d.id, 'output');
+      })
+      .on('mouseenter', function(event, d) {
+        setHoveredPoint({ blockId: d.id, type: 'output' });
+      })
+      .on('mouseleave', function() {
+        setHoveredPoint(null);
+      });
+
+    outputPoint
+      .append('circle')
+      .attr('r', CONNECTION_POINT_SIZE / 2)
+      .attr('fill', '#F44336')
+      .attr('stroke', 'white')
+      .attr('stroke-width', 2);
+
+    outputPoint
+      .append('text')
+      .attr('x', CONNECTION_POINT_SIZE / 2)
+      .attr('y', CONNECTION_POINT_SIZE / 2)
+      .attr('text-anchor', 'middle')
+      .attr('dominant-baseline', 'middle')
+      .attr('font-size', '12px')
+      .attr('fill', 'white')
+      .attr('pointer-events', 'none')
+      .text('→');
+
+    // Иконка редактирования
     const editIconGroup = newBlocks
       .append('g')
       .attr('class', 'edit-icon-group')
@@ -310,28 +510,72 @@ const CreateSimulation: React.FC = () => {
         d3.select(this).select('circle').style('fill', 'white');
       });
 
-    // Большой круг для лучшей кликабельности
     editIconGroup
       .append('circle')
-      .attr('r', 18) // Увеличен радиус
+      .attr('r', 18)
       .attr('fill', 'white')
-      .attr('opacity', (d: Block) => showEditIcon === d.id ? 0.9 : 0.7) // Всегда видна
+      .attr('opacity', (d: Block) => showEditIcon === d.id ? 0.9 : 0.7)
       .style('pointer-events', 'all');
 
-    // Карандашик внутри круга
     editIconGroup
       .append('text')
       .attr('text-anchor', 'middle')
       .attr('dominant-baseline', 'middle')
       .attr('font-size', '14px')
       .attr('fill', '#333')
-      .attr('opacity', (d: Block) => showEditIcon === d.id ? 1 : 0.8) // Всегда видна
+      .attr('opacity', (d: Block) => showEditIcon === d.id ? 1 : 0.8)
       .style('pointer-events', 'none')
       .text('✎');
 
+    // Обработка перетаскивания блоков (упрощенная версия)
+    const dragHandler = d3.drag<SVGGElement, Block>()
+      .on('start', function(event, d) {
+        d3.select(this).raise().classed('dragging', true);
+        setSelectedBlockId(d.id);
+        setSelectedConnectionId(null);
+      })
+      .on('drag', function(event, d) {
+        const newX = Math.max(0, Math.min(event.x, svgNode.clientWidth - BLOCK_SIZE.width));
+        const newY = Math.max(0, Math.min(event.y, svgNode.clientHeight - BLOCK_SIZE.height));
+        
+        d3.select(this)
+          .attr('transform', `translate(${newX}, ${newY})`);
+        
+        // Обновляем состояние
+        setBlocks(prev => prev.map(block => 
+          block.id === d.id ? { ...block, x: newX, y: newY } : block
+        ));
+      })
+      .on('end', function() {
+        d3.select(this).classed('dragging', false);
+      });
+
+    // Применяем обработчик перетаскивания
+    newBlocks.call(dragHandler);
+
+    // Обработчики кликов
+    newBlocks
+      .on('click', function(event, d) {
+        event.stopPropagation();
+        setSelectedBlockId(d.id);
+        setSelectedConnectionId(null);
+      })
+      .on('dblclick', function(event, d) {
+        event.stopPropagation();
+        openEditModal(d);
+      })
+      .on('mouseenter', function(event, d) {
+        setShowEditIcon(d.id);
+      })
+      .on('mouseleave', function(event, d) {
+        if (showEditIcon === d.id) {
+          setShowEditIcon(null);
+        }
+      });
+
     // Обновляем существующие блоки
     blockSelection
-      .style('cursor', 'pointer')
+      .style('cursor', 'move')
       .attr('class', (d: Block) => 
         `draggable-block ${selectedBlockId === d.id ? 'selected' : ''}`
       )
@@ -341,7 +585,7 @@ const CreateSimulation: React.FC = () => {
         openEditModal(d);
       });
 
-    // Обновляем название блоков с переносом строк
+    // Обновляем название блоков
     blockSelection.select('.block-name-text')
       .each(function(d: Block) {
         const text = d.customName || BLOCK_TYPES.find(t => t.id === d.type)?.label || 'Неизвестный блок';
@@ -358,7 +602,7 @@ const CreateSimulation: React.FC = () => {
         });
       });
 
-    // Обновляем скорость добычи с переносом строк
+    // Обновляем скорость добычи
     blockSelection.select('.production-rate-text')
       .each(function(d: Block) {
         if (d.type === 'source') {
@@ -389,10 +633,161 @@ const CreateSimulation: React.FC = () => {
       .select('text')
       .attr('opacity', (d: Block) => showEditIcon === d.id ? 1 : 0.8);
 
-  }, [blocks, selectedBlockId, showEditIcon]);
+  }, [blocks, selectedBlockId, showEditIcon, hoveredPoint]);
 
-  // Остальные функции остаются без изменений...
-  // [Весь остальной код остается таким же, начиная с handleDragStart и до конца компонента]
+  // Обновление D3 при изменении соединений
+  useEffect(() => {
+    if (!connectionsContainerRef.current) return;
+
+    const container = connectionsContainerRef.current;
+    
+    // Объединяем данные с элементами
+    const connectionSelection = container
+      .selectAll<SVGGElement, Connection>('.connection')
+      .data(connections, (d: Connection) => d.id.toString());
+
+    // Удаляем старые соединения
+    connectionSelection.exit().remove();
+
+    // Добавляем новые соединения
+    const newConnections = connectionSelection
+      .enter()
+      .append('g')
+      .attr('class', (d: Connection) => 
+        `connection ${selectedConnectionId === d.id ? 'selected' : ''}`
+      )
+      .attr('id', (d: Connection) => `connection-${d.id}`)
+      .on('click', function(event, d) {
+        event.stopPropagation();
+        setSelectedConnectionId(d.id);
+        setSelectedBlockId(null);
+      });
+
+    // Линия соединения
+    newConnections
+      .append('path')
+      .attr('class', 'connection-line')
+      .attr('fill', 'none')
+      .attr('stroke', (d: Connection) => 
+        selectedConnectionId === d.id ? '#FFEB3B' : '#2196F3'
+      )
+      .attr('stroke-width', (d: Connection) => 
+        selectedConnectionId === d.id ? 3 : 2
+      )
+      .attr('marker-end', 'url(#arrowhead)');
+
+    // Обновляем существующие соединения
+    connectionSelection
+      .attr('class', (d: Connection) => 
+        `connection ${selectedConnectionId === d.id ? 'selected' : ''}`
+      )
+      .select('.connection-line')
+      .attr('stroke', (d: Connection) => 
+        selectedConnectionId === d.id ? '#FFEB3B' : '#2196F3'
+      )
+      .attr('stroke-width', (d: Connection) => 
+        selectedConnectionId === d.id ? 3 : 2
+      );
+
+    // Обновляем пути для всех соединений
+    container.selectAll('.connection-line')
+      .attr('d', (d: Connection) => {
+        const sourceBlock = blocks.find(b => b.id === d.sourceBlockId);
+        const targetBlock = blocks.find(b => b.id === d.targetBlockId);
+        
+        if (!sourceBlock || !targetBlock) return '';
+        
+        return calculateArrowPath(sourceBlock, targetBlock, d.sourcePoint, d.targetPoint);
+      });
+
+  }, [connections, blocks, selectedConnectionId]);
+
+  // Функция создания соединения
+  const createConnection = (
+    sourceBlockId: number, 
+    sourcePointType: 'input' | 'output',
+    targetBlockId: number, 
+    targetPointType: 'input' | 'output'
+  ) => {
+    // Нельзя соединять с тем же блоком
+    if (sourceBlockId === targetBlockId) {
+      alert('Нельзя соединять блок с самим собой');
+      return;
+    }
+    
+    // Проверяем логику соединений
+    // Можно соединять только выход с входом
+    if (!(sourcePointType === 'output' && targetPointType === 'input')) {
+      alert('Можно соединять только выход (красная точка) с входом (зеленая точка)');
+      return;
+    }
+    
+    // Определяем источник и цель
+    const sourceBlockIdFinal = sourceBlockId;
+    const targetBlockIdFinal = targetBlockId;
+    
+    // Проверяем, нет ли уже такого соединения
+    const existingConnection = connections.find(c => 
+      c.sourceBlockId === sourceBlockIdFinal && 
+      c.targetBlockId === targetBlockIdFinal
+    );
+    
+    if (existingConnection) {
+      alert('Соединение уже существует');
+      return;
+    }
+    
+    // Создаем новое соединение
+    const newConnection: Connection = {
+      id: nextConnectionId,
+      sourceBlockId: sourceBlockIdFinal,
+      targetBlockId: targetBlockIdFinal,
+      sourcePoint: 'output',
+      targetPoint: 'input'
+    };
+    
+    setConnections(prev => [...prev, newConnection]);
+    setNextConnectionId(prev => prev + 1);
+    
+    // Выделяем созданное соединение
+    setSelectedConnectionId(nextConnectionId);
+    setSelectedBlockId(null);
+  };
+
+  // Обработчик нажатия на точку соединения
+  const handleConnectionPointMouseDown = (blockId: number, pointType: 'input' | 'output') => {
+    const block = blocks.find(b => b.id === blockId);
+    if (!block) return;
+    
+    const points = getConnectionPoints(block);
+    const point = pointType === 'input' ? points.input : points.output;
+    
+    setConnectingFrom({
+      blockId,
+      type: pointType,
+      x: point.x + CONNECTION_POINT_SIZE / 2,
+      y: point.y + CONNECTION_POINT_SIZE / 2
+    });
+    
+    // Выделяем блок
+    setSelectedBlockId(blockId);
+    setSelectedConnectionId(null);
+  };
+
+  // Удаление соединения
+  const handleDeleteConnection = (connectionId: number) => {
+    setConnections(prev => prev.filter(conn => conn.id !== connectionId));
+    if (selectedConnectionId === connectionId) {
+      setSelectedConnectionId(null);
+    }
+  };
+
+  // Удаление всех соединений связанных с блоком
+  const handleDeleteBlockConnections = (blockId: number) => {
+    setConnections(prev => prev.filter(conn => 
+      conn.sourceBlockId !== blockId && conn.targetBlockId !== blockId
+    ));
+  };
 
   // Начало перетаскивания из панели блоков
   const handleDragStart = (e: React.DragEvent, type: string) => {
@@ -455,22 +850,18 @@ const CreateSimulation: React.FC = () => {
     const svgRect = svgRef.current?.getBoundingClientRect();
     if (!svgRect) return;
 
-    // Вычисляем координаты относительно SVG
     const x = e.clientX - svgRect.left - BLOCK_SIZE.width / 2;
     const y = e.clientY - svgRect.top - BLOCK_SIZE.height / 2;
 
-    // Проверяем границы
     const maxX = svgRect.width - BLOCK_SIZE.width;
     const maxY = svgRect.height - BLOCK_SIZE.height;
     const clampedX = Math.max(0, Math.min(x, maxX));
     const clampedY = Math.max(0, Math.min(y, maxY));
 
-    // Проверяем, что перетаскивается: блок или префаб
     const prefabData = e.dataTransfer.getData('prefab');
     const blockType = e.dataTransfer.getData('blockType');
 
     if (prefabData) {
-      // Создаем блок из префаба
       const prefab: Prefab = JSON.parse(prefabData);
       const newBlock: Block = {
         id: nextId,
@@ -485,7 +876,6 @@ const CreateSimulation: React.FC = () => {
       setNextId(prev => prev + 1);
       setDraggingPrefabId(null);
     } else if (blockType) {
-      // Создаем обычный блок
       const newBlock: Block = {
         id: nextId,
         type: blockType,
@@ -519,7 +909,6 @@ const CreateSimulation: React.FC = () => {
     const svgRect = svgRef.current?.getBoundingClientRect();
     if (!svgRect) return;
 
-    // Позиция для вставки - рядом с выделенным блоком или в центре
     let newX = 100;
     let newY = 100;
     
@@ -534,7 +923,6 @@ const CreateSimulation: React.FC = () => {
       newY = svgRect.height / 2 - BLOCK_SIZE.height / 2;
     }
 
-    // Проверяем границы
     const maxX = svgRect.width - BLOCK_SIZE.width;
     const maxY = svgRect.height - BLOCK_SIZE.height;
     const clampedX = Math.max(0, Math.min(newX, maxX));
@@ -556,6 +944,8 @@ const CreateSimulation: React.FC = () => {
 
   // Удаление блока
   const handleDeleteBlock = (id: number) => {
+    // Удаляем все соединения связанные с этим блоком
+    handleDeleteBlockConnections(id);
     setBlocks(prev => prev.filter(block => block.id !== id));
     if (selectedBlockId === id) {
       setSelectedBlockId(null);
@@ -569,12 +959,16 @@ const CreateSimulation: React.FC = () => {
     }
   };
 
-  // Очистка всех блоков
+  // Очистка всех блоков и соединений
   const handleClearAll = () => {
-    if (blocks.length > 0 && window.confirm('Вы уверены, что хотите удалить все блоки?')) {
+    if ((blocks.length > 0 || connections.length > 0) && window.confirm('Вы уверены, что хотите удалить все блоки и соединения?')) {
       setBlocks([]);
+      setConnections([]);
       setNextId(1);
+      setNextConnectionId(1);
       setSelectedBlockId(null);
+      setSelectedConnectionId(null);
+      setConnectingFrom(null);
     }
   };
 
@@ -586,9 +980,12 @@ const CreateSimulation: React.FC = () => {
       target === workspaceRef.current || 
       target.tagName === 'svg' ||
       (target.classList && !target.classList.contains('draggable-block') && 
-       !target.classList.contains('edit-icon'))
+       !target.classList.contains('edit-icon') &&
+       !target.classList.contains('connection-point'))
     ) {
       setSelectedBlockId(null);
+      setSelectedConnectionId(null);
+      setConnectingFrom(null);
     }
   };
 
@@ -801,7 +1198,26 @@ const CreateSimulation: React.FC = () => {
                 <span className="stat-label">Блоков:</span>
                 <span className="stat-value">{blocks.length}</span>
               </div>
+              <div className="stat-item">
+                <span className="stat-label">Соединений:</span>
+                <span className="stat-value">{connections.length}</span>
+              </div>
             </div>
+            {connectingFrom && (
+              <div className="connection-hint">
+                <div className="hint-text">
+                  <span className="hint-icon">🔗</span>
+                  Перетащите к нужной точке и отпустите
+                </div>
+                <button 
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => setConnectingFrom(null)}
+                  style={{ marginTop: '8px' }}
+                >
+                  Отменить
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -811,6 +1227,12 @@ const CreateSimulation: React.FC = () => {
             <h2>Рабочая область</h2>
             <div className="workspace-info">
               <span className="info-item">Блоков: {blocks.length}</span>
+              <span className="info-item">Соединений: {connections.length}</span>
+              {connectingFrom && (
+                <span className="info-item connecting">
+                  Создание соединения: перетащите к нужной точке
+                </span>
+              )}
             </div>
           </div>
 
@@ -828,7 +1250,7 @@ const CreateSimulation: React.FC = () => {
               height="100%"
               className="d3-svg-canvas"
             >
-              {/* Сетка для удобства */}
+              {/* Определения для стрелок */}
               <defs>
                 <pattern 
                   id="grid" 
@@ -843,6 +1265,28 @@ const CreateSimulation: React.FC = () => {
                     strokeWidth="1"
                   />
                 </pattern>
+                
+                <marker
+                  id="arrowhead"
+                  markerWidth="10"
+                  markerHeight="7"
+                  refX="9"
+                  refY="3.5"
+                  orient="auto"
+                >
+                  <polygon points="0 0, 10 3.5, 0 7" fill="#2196F3" />
+                </marker>
+                
+                <marker
+                  id="arrowhead-selected"
+                  markerWidth="12"
+                  markerHeight="8"
+                  refX="10"
+                  refY="4"
+                  orient="auto"
+                >
+                  <polygon points="0 0, 12 4, 0 8" fill="#FFEB3B" />
+                </marker>
               </defs>
               
               <rect
@@ -851,7 +1295,6 @@ const CreateSimulation: React.FC = () => {
                 fill="url(#grid)"
               />
               
-              {/* Тень для области */}
               <rect
                 width="100%"
                 height="100%"
@@ -860,6 +1303,36 @@ const CreateSimulation: React.FC = () => {
                 strokeWidth="2"
                 strokeDasharray="5,5"
               />
+              
+              {/* Временное соединение */}
+              <path
+                ref={tempConnectionRef}
+                className="temp-connection"
+                fill="none"
+                stroke="#9C27B0"
+                strokeWidth="3"
+                strokeDasharray="5,5"
+                markerEnd="url(#arrowhead)"
+              />
+              
+              {/* Подсказки для точек */}
+              {hoveredPoint && (
+                <text
+                  x={hoveredPoint.type === 'input' ? 
+                    getConnectionPoints(blocks.find(b => b.id === hoveredPoint.blockId)!).input.x - 5 :
+                    getConnectionPoints(blocks.find(b => b.id === hoveredPoint.blockId)!).output.x + CONNECTION_POINT_SIZE + 5}
+                  y={hoveredPoint.type === 'input' ? 
+                    getConnectionPoints(blocks.find(b => b.id === hoveredPoint.blockId)!).input.y + CONNECTION_POINT_SIZE / 2 - 15 :
+                    getConnectionPoints(blocks.find(b => b.id === hoveredPoint.blockId)!).output.y + CONNECTION_POINT_SIZE / 2 - 15}
+                  textAnchor={hoveredPoint.type === 'input' ? 'end' : 'start'}
+                  fill="#666"
+                  fontSize="12"
+                  fontWeight="bold"
+                  pointerEvents="none"
+                >
+                  {hoveredPoint.type === 'input' ? 'Вход' : 'Выход'}
+                </text>
+              )}
             </svg>
           </div>
         </div>
@@ -893,6 +1366,9 @@ const CreateSimulation: React.FC = () => {
                 <div className="block-preview-info">
                   <span className="block-type">
                     Тип: {BLOCK_TYPES.find(t => t.id === editingBlock.type)?.label}
+                  </span>
+                  <span className="block-connections">
+                    Соединений: {connections.filter(c => c.sourceBlockId === editingBlock.id || c.targetBlockId === editingBlock.id).length}
                   </span>
                 </div>
               </div>
@@ -941,7 +1417,7 @@ const CreateSimulation: React.FC = () => {
                 <button 
                   className="btn btn-danger btn-block"
                   onClick={() => {
-                    if (window.confirm('Вы уверены, что хотите удалить этот блок?')) {
+                    if (window.confirm('Вы уверены, что хотите удалить этот блок и все связанные соединения?')) {
                       handleDeleteBlock(editingBlock.id);
                       handleCloseModal();
                     }
